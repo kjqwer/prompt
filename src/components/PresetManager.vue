@@ -461,10 +461,39 @@ onMounted(() => {
 
     <!-- 文件夹管理标签页 -->
     <div v-if="activeTab === 'folders'" class="pm-content">
+      <!-- 文件夹统计信息 -->
+      <div class="pm-folder-stats">
+        <div class="pm-stat-card">
+          <div class="pm-stat-icon">📁</div>
+          <div class="pm-stat-info">
+            <div class="pm-stat-number">{{ folderTree.length }}</div>
+            <div class="pm-stat-label">文件夹总数</div>
+          </div>
+        </div>
+        <div class="pm-stat-card">
+          <div class="pm-stat-icon">📋</div>
+          <div class="pm-stat-info">
+            <div class="pm-stat-number">{{ (store.extendedPresets || []).length }}</div>
+            <div class="pm-stat-label">预设总数</div>
+          </div>
+        </div>
+        <div class="pm-stat-card">
+          <div class="pm-stat-icon">📂</div>
+          <div class="pm-stat-info">
+            <div class="pm-stat-number">{{ (store.extendedPresets || []).filter(p => !p.folderId).length }}</div>
+            <div class="pm-stat-label">未分类预设</div>
+          </div>
+        </div>
+      </div>
+      
       <div class="pm-folder-list">
         <div v-if="folderTree.length === 0" class="pm-empty">
           <div class="pm-empty-icon">📁</div>
-          <div class="pm-empty-text">暂无文件夹，点击上方按钮创建第一个文件夹</div>
+          <div class="pm-empty-text">
+            <h3>暂无文件夹</h3>
+            <p>创建文件夹来组织您的预设</p>
+            <p>点击上方的"新建文件夹"按钮开始</p>
+          </div>
         </div>
         
         <div v-for="folder in folderTree" :key="folder.id" class="pm-folder-item">
@@ -764,10 +793,57 @@ onMounted(() => {
   box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
+/* 文件夹统计卡片 */
+.pm-folder-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.pm-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  transition: all 0.2s ease;
+}
+
+.pm-stat-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.pm-stat-icon {
+  font-size: 2rem;
+  opacity: 0.8;
+}
+
+.pm-stat-info {
+  flex: 1;
+}
+
+.pm-stat-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+
+.pm-stat-label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.25rem;
+}
+
 .pm-preset-list, .pm-folder-list {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  min-height: 400px;
 }
 
 .pm-empty {
@@ -778,6 +854,8 @@ onMounted(() => {
   padding: 3rem 1rem;
   text-align: center;
   color: var(--color-text-tertiary);
+  flex: 1;
+  min-height: 300px;
 }
 
 .pm-empty-icon {
@@ -789,6 +867,22 @@ onMounted(() => {
 .pm-empty-text {
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.pm-empty-text h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.pm-empty-text p {
+  margin: 0 0 0.25rem 0;
+  color: var(--color-text-tertiary);
+}
+
+.pm-empty-text p:last-child {
+  margin-bottom: 0;
 }
 
 .pm-preset-item, .pm-folder-item {
@@ -1111,6 +1205,24 @@ onMounted(() => {
   }
 }
 
+@media (max-width: 768px) {
+  .pm-folder-stats {
+    grid-template-columns: 1fr;
+  }
+  
+  .pm-stat-card {
+    padding: 0.75rem;
+  }
+  
+  .pm-stat-icon {
+    font-size: 1.5rem;
+  }
+  
+  .pm-stat-number {
+    font-size: 1.25rem;
+  }
+}
+
 @media (max-width: 640px) {
   .pm-content {
     padding: 0.75rem;
@@ -1119,6 +1231,10 @@ onMounted(() => {
   .pm-preset-item,
   .pm-folder-item {
     padding: 0.75rem;
+  }
+  
+  .pm-folder-stats {
+    margin-bottom: 1rem;
   }
   
   .pm-modal-header,
