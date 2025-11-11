@@ -10,6 +10,15 @@ const draggingIndex = ref<number | null>(null);
 const overIndex = ref<number | null>(null);
 const dragPreview = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
+// 指针拖拽新增状态
+const insertSide = ref<'before' | 'after' | null>(null);
+const pointerId = ref<number | null>(null);
+const startX = ref(0);
+const startY = ref(0);
+const lastX = ref(0);
+const lastY = ref(0);
+const dragStarted = ref(false);
+const DRAG_THRESHOLD = 3; // 像素阈值，避免误触
 const editingIndex = ref<number | null>(null);
 const editingValue = ref('');
 const addingMapIndex = ref<number | null>(null);
@@ -138,106 +147,119 @@ function getTokenWrapperInfo(token: string) {
   return store.getTokenWrapperInfo(token);
 }
 
-function onDragStart(index: number, e: DragEvent) { 
+// 指针事件版拖拽：更高性能且可自定义插入指示
+function onPointerDown(index: number, e: PointerEvent) {
+  if (editingIndex.value === index) return;
   draggingIndex.value = index;
-  isDragging.value = true;
-  
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', tokens.value[index] || '');
-    
-    // 创建自定义拖拽预览
-    const dragElement = e.target as HTMLElement;
-    const token = tokens.value[index] || '';
-    const translation = displayTrans(token);
-    
-    // 创建预览元素
-    const preview = document.createElement('div');
-    preview.className = 'drag-preview';
-    preview.innerHTML = `
-      <div class="drag-preview-content">
-        <span class="drag-preview-key">${token}</span>
-        <span class="drag-preview-arrow">→</span>
-        <span class="drag-preview-trans">${translation}</span>
-      </div>
-    `;
-    
-    // 设置预览样式（减少布局与重绘）
-    preview.style.position = 'fixed';
-    preview.style.top = '0';
-    preview.style.left = '0';
-    preview.style.zIndex = '1000';
-    preview.style.pointerEvents = 'none';
-    preview.style.visibility = 'hidden';
-    // 降低绘制成本
-    ;(preview.style as any).contain = 'layout style paint';
-    preview.style.willChange = 'transform, opacity';
-    
-    document.body.appendChild(preview);
-    dragPreview.value = preview;
-    
-    // 设置拖拽图像
-    e.dataTransfer.setDragImage(preview, 0, 0);
-    
-    // 预览节点在 dragend 中统一清理，避免频繁移除导致卡顿
-  }
-}
-
-function onDragOver(index: number, e: DragEvent) { 
-  e.preventDefault(); 
-  if (draggingIndex.value === null) return;
-  
-  e.dataTransfer!.dropEffect = 'move';
-  
-  // 只有当拖拽到不同位置时才更新
-  if (overIndex.value !== index) {
-    overIndex.value = index;
-  }
-}
-
-function onDragEnter(index: number, e: DragEvent) {
-  e.preventDefault();
-  if (draggingIndex.value !== null && draggingIndex.value !== index) {
-    overIndex.value = index;
-  }
-}
-
-function onDragLeave(e: DragEvent) {
-  // 只有当离开整个拖拽区域时才清除
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const x = e.clientX;
-  const y = e.clientY;
-  
-  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-    overIndex.value = null;
-  }
-}
-
-function onDrop(index: number, e: DragEvent) {
-  e.preventDefault();
-  if (draggingIndex.value == null) return;
-  
-  // 执行重排序
-  store.reorderTokens(draggingIndex.value, index);
-  
-  // 重置状态
-  draggingIndex.value = null; 
-  overIndex.value = null;
+  pointerId.value = e.pointerId;
+  startX.value = e.clientX;
+  startY.value = e.clientY;
+  lastX.value = e.clientX;
+  lastY.value = e.clientY;
+  dragStarted.value = false;
   isDragging.value = false;
-  
-  showNotification('已重新排序', 'success');
+  insertSide.value = null;
+
+  // 监听全局移动与抬起
+  window.addEventListener('pointermove', handlePointerMove);
+  window.addEventListener('pointerup', handlePointerUp, { once: true });
 }
 
-function onDragEnd() {
-  // 清理拖拽状态
+function handlePointerMove(e: PointerEvent) {
+  lastX.value = e.clientX; 
+  lastY.value = e.clientY;
+  const dx = e.clientX - startX.value;
+  const dy = e.clientY - startY.value;
+  if (!dragStarted.value && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    dragStarted.value = true;
+    isDragging.value = true;
+    if (draggingIndex.value != null) createPointerPreview(draggingIndex.value);
+  }
+  if (!isDragging.value) return;
+  positionPreview(e.clientX, e.clientY);
+  updateOverIndexAndSide(e.clientX, e.clientY);
+}
+
+function handlePointerUp(e: PointerEvent) {
+  window.removeEventListener('pointermove', handlePointerMove);
+  if (!dragStarted.value || draggingIndex.value == null) { 
+    cleanupDrag(); 
+    return; 
+  }
+  const from = draggingIndex.value!;
+  const j = overIndex.value;
+  const side = insertSide.value;
+  if (j != null && side) {
+    let to = j;
+    if (side === 'before') {
+      to = j - (from < j ? 1 : 0);
+    } else {
+      to = j + (from > j ? 1 : 0);
+    }
+    if (to < 0) to = 0;
+    if (to >= tokens.value.length) to = tokens.value.length - 1;
+    store.reorderTokens(from, to);
+    showNotification('已重新排序', 'success');
+  }
+  cleanupDrag();
+}
+
+function cleanupDrag() {
   draggingIndex.value = null;
   overIndex.value = null;
   isDragging.value = false;
-  
+  insertSide.value = null;
+  pointerId.value = null;
   if (dragPreview.value) {
     document.body.removeChild(dragPreview.value);
     dragPreview.value = null;
   }
+}
+
+function createPointerPreview(index: number) {
+  const token = tokens.value[index] || '';
+  const translation = displayTrans(token);
+  const preview = document.createElement('div');
+  preview.className = 'drag-preview';
+  preview.innerHTML = `
+    <div class="drag-preview-content">
+      <span class="drag-preview-key">${token}</span>
+      <span class="drag-preview-arrow">→</span>
+      <span class="drag-preview-trans">${translation}</span>
+    </div>
+  `;
+  preview.style.position = 'fixed';
+  preview.style.top = '0';
+  preview.style.left = '0';
+  preview.style.zIndex = '1000';
+  preview.style.pointerEvents = 'none';
+  ;(preview.style as any).contain = 'layout style paint';
+  preview.style.willChange = 'transform, opacity';
+  document.body.appendChild(preview);
+  dragPreview.value = preview;
+}
+
+function positionPreview(x: number, y: number) {
+  if (!dragPreview.value) return;
+  dragPreview.value.style.transform = `translate(${x + 12}px, ${y + 12}px)`;
+}
+
+function updateOverIndexAndSide(x: number, y: number) {
+  insertSide.value = null;
+  overIndex.value = null;
+  const el = document.elementFromPoint(x, y) as HTMLElement | null;
+  if (!el) return;
+  const tokenEl = el.closest('.pe-token-compact, .pe-token-detail') as HTMLElement | null;
+  if (!tokenEl) return;
+  const idxAttr = tokenEl.getAttribute('data-index');
+  if (idxAttr == null) return;
+  const idx = parseInt(idxAttr, 10);
+  if (Number.isNaN(idx)) return;
+  if (idx === draggingIndex.value) { overIndex.value = null; insertSide.value = null; return; }
+  const rect = tokenEl.getBoundingClientRect();
+  const midX = rect.left + rect.width / 2;
+  overIndex.value = idx;
+  insertSide.value = x < midX ? 'before' : 'after';
 }
 
 function beginEdit(i: number) {
@@ -456,20 +478,15 @@ function displayTrans(key: string): string {
           <div
             v-for="(k,i) in tokens"
             :key="k + '_' + i"
-            :draggable="editingIndex !== i"
+            :data-index="i"
             :class="{ 
               'dragging': draggingIndex === i, 
-              'drag-over': overIndex === i && draggingIndex !== i,
-              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i,
+              'insert-before': overIndex === i && insertSide === 'before' && draggingIndex !== i,
+              'insert-after': overIndex === i && insertSide === 'after' && draggingIndex !== i,
               'editing': editingIndex === i
             }"
             class="pe-token-compact"
-            @dragstart="onDragStart(i, $event)"
-            @dragover="onDragOver(i, $event)"
-            @dragenter="onDragEnter(i, $event)"
-            @dragleave="onDragLeave"
-            @drop="onDrop(i, $event)"
-            @dragend="onDragEnd"
+            @pointerdown="onPointerDown(i, $event)"
             @dblclick="beginEdit(i)"
             :title="`${k} → ${displayTrans(k)}`"
           >
@@ -537,20 +554,15 @@ function displayTrans(key: string): string {
           <div
             v-for="(k,i) in tokens"
             :key="k + '_' + i"
-            :draggable="true"
+            :data-index="i"
             :class="{ 
               'dragging': draggingIndex === i, 
-              'drag-over': overIndex === i && draggingIndex !== i,
-              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i,
+              'insert-before': overIndex === i && insertSide === 'before' && draggingIndex !== i,
+              'insert-after': overIndex === i && insertSide === 'after' && draggingIndex !== i,
               'editing': editingIndex === i || addingMapIndex === i
             }"
             class="pe-token-detail"
-            @dragstart="onDragStart(i, $event)"
-            @dragover="onDragOver(i, $event)"
-            @dragenter="onDragEnter(i, $event)"
-            @dragleave="onDragLeave"
-            @drop="onDrop(i, $event)"
-            @dragend="onDragEnd"
+            @pointerdown="onPointerDown(i, $event)"
           >
             <div class="pe-token-header">
               <span class="pe-handle-detail">⋮⋮</span>
@@ -1286,6 +1298,7 @@ function displayTrans(key: string): string {
 }
 
 .pe-token-detail {
+  position: relative;
   background-color: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1716,6 +1729,47 @@ function displayTrans(key: string): string {
   background-color: var(--color-accent-light);
   transform: scale(1.02);
   transition: all 0.2s ease;
+}
+
+/* 插入方向指示：目标项向前/后移动并显示清晰插入方向 */
+.pe-token-compact.insert-before,
+.pe-token-detail.insert-before {
+  transform: translateX(10px);
+  border-color: var(--color-accent);
+}
+
+.pe-token-compact.insert-after,
+.pe-token-detail.insert-after {
+  transform: translateX(-10px);
+  border-color: var(--color-accent);
+}
+
+.pe-token-compact.insert-before::before,
+.pe-token-detail.insert-before::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background-color: var(--color-accent);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.pe-token-compact.insert-after::after,
+.pe-token-detail.insert-after::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background-color: var(--color-accent);
+  border-radius: 2px;
+  opacity: 0.6;
 }
 
 /* 拖拽容器样式 */
