@@ -353,9 +353,13 @@ export const usePromptStore = defineStore('promptStore', {
       return null;
     },
     getTranslation(key: string, lang: LangCode): string | null {
-      const tag = this.getTagByKey(key);
+      // 兼容包裹层：如 {aaa}、(aaa) 等
+      const { core, wrappers } = this.parseTokenWrappers(key);
+      const tag = this.getTagByKey(core);
       if (!tag) return null;
-      return tag.translation?.[lang] ?? tag.key;
+      const translatedCore = tag.translation?.[lang] ?? tag.key;
+      // 保持原有包裹层结构，返回被翻译后的核心
+      return this.wrapToken(translatedCore, wrappers);
     },
     getSuggestions(prefix: string, limit = 8): string[] {
       const list: string[] = [];
