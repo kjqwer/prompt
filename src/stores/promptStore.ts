@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { loadInitialDataset } from '../utils/yamlLoader';
-import type { PromptDataset, PromptCategory, PromptGroup, PromptTag, LangCode, ExportBundle, CustomDiff, PromptPreset } from '../types';
+import type { PromptDataset, PromptCategory, PromptGroup, PromptTag, LangCode, ExportBundle, CustomDiff, PromptPreset, ExtendedPreset, PresetFolder, PresetManagement, PresetType } from '../types';
 
 const LS_KEY = 'ops.prompt.dataset.v1';
 let saveTimer: number | null = null; // 非响应式计时器，避免递归更新
@@ -20,6 +20,17 @@ export const usePromptStore = defineStore('promptStore', {
     // 编辑器相关
     promptText: '',
     presets: [] as PromptPreset[],
+    // 扩展预设管理
+    extendedPresets: [] as ExtendedPreset[],
+    presetFolders: [] as PresetFolder[],
+    presetManagement: {
+      folders: [],
+      presets: [],
+      settings: {
+        autoBackup: true,
+        maxPresets: 1000
+      }
+    } as PresetManagement,
   }),
   getters: {
     categories: (s) => s.dataset?.categories ?? [],
@@ -68,6 +79,12 @@ export const usePromptStore = defineStore('promptStore', {
             this.dataset = deepClone(baseline!);
           }
           this.presets = bundle.presets || [];
+          // 恢复扩展预设数据
+          this.extendedPresets = bundle.extendedPresets || [];
+          this.presetFolders = bundle.presetFolders || [];
+          if (bundle.presetManagement) {
+            this.presetManagement = bundle.presetManagement;
+          }
           // 恢复编辑器内容与语言
           if (typeof bundle.promptText === 'string') {
             this.promptText = bundle.promptText;
@@ -86,6 +103,10 @@ export const usePromptStore = defineStore('promptStore', {
         const guessLang: LangCode = (this.dataset.languages.includes('zh_CN') ? 'zh_CN' : 'en') as LangCode;
         this.selectedLang = guessLang;
       }
+      // 初始化扩展预设管理
+      this.initializeExtendedPresets();
+      // 自动迁移旧预设到新系统
+      this.migrateOldPresets();
       this.autoPersist();
     },
     autoPersist() {
@@ -104,6 +125,10 @@ export const usePromptStore = defineStore('promptStore', {
         savedAt: new Date().toISOString(),
         dataset: deepClone(this.dataset),
         presets: deepClone(this.presets),
+        // 扩展预设数据
+        extendedPresets: deepClone(this.extendedPresets),
+        presetFolders: deepClone(this.presetFolders),
+        presetManagement: deepClone(this.presetManagement),
         promptText: this.promptText,
         selectedLang: this.selectedLang,
       };
@@ -116,7 +141,13 @@ export const usePromptStore = defineStore('promptStore', {
       if (!bundle) {
         if (!baseline) baseline = await loadInitialDataset();
         this.dataset = deepClone(baseline!);
+        this.presets = [];
+        this.extendedPresets = [];
+        this.presetFolders = [];
       } else {
+        // 确保兼容性
+        bundle = this.ensureCompatibility(bundle);
+        
         if (bundle.dataset) {
           this.dataset = bundle.dataset;
         } else if (bundle.customDiff) {
@@ -124,9 +155,17 @@ export const usePromptStore = defineStore('promptStore', {
           this.dataset = this.applyDiff(deepClone(baseline!), bundle.customDiff);
         }
         this.presets = bundle.presets || [];
+        // 导入扩展预设数据
+        this.extendedPresets = bundle.extendedPresets || [];
+        this.presetFolders = bundle.presetFolders || [];
+        if (bundle.presetManagement) {
+          this.presetManagement = bundle.presetManagement;
+        }
       }
       this.selectedCategoryIndex = 0;
       this.selectedGroupIndex = 0;
+      // 确保扩展预设管理已初始化
+      this.initializeExtendedPresets();
       this.save();
     },
     exportToJson(): string {
@@ -137,6 +176,10 @@ export const usePromptStore = defineStore('promptStore', {
         savedAt: new Date().toISOString(),
         customDiff: diff,
         presets: deepClone(this.presets),
+        // 导出扩展预设数据
+        extendedPresets: deepClone(this.extendedPresets),
+        presetFolders: deepClone(this.presetFolders),
+        presetManagement: deepClone(this.presetManagement),
       };
       return JSON.stringify(bundle, null, 2);
     },
@@ -598,6 +641,249 @@ export const usePromptStore = defineStore('promptStore', {
         }
       }
       return target;
+    },
+
+    // 扩展预设管理方法
+    initializeExtendedPresets() {
+      // 如果没有扩展预设数据，初始化默认结构
+      if (!this.extendedPresets) {
+        this.extendedPresets = [];
+      }
+      if (!this.presetFolders) {
+        this.presetFolders = [];
+      }
+      if (!this.presetManagement) {
+        this.presetManagement = {
+          folders: [],
+          presets: [],
+          settings: {
+            autoBackup: true,
+            maxPresets: 1000
+          }
+        };
+      }
+      
+      // 确保有默认文件夹
+      if (this.presetFolders.length === 0) {
+        const defaultFolder = this.createPresetFolder({
+          name: '默认文件夹',
+          description: '系统默认预设文件夹',
+          color: '#6366f1'
+        });
+        
+        // 设置为默认文件夹
+        if (this.presetManagement.settings) {
+          this.presetManagement.settings.defaultFolder = defaultFolder.id;
+        }
+      }
+    },
+
+    createExtendedPreset(data: Omit<ExtendedPreset, 'id' | 'createdAt' | 'updatedAt'>) {
+      const now = new Date().toISOString();
+      const preset: ExtendedPreset = {
+        id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        createdAt: now,
+        updatedAt: now,
+        ...data
+      };
+      
+      this.extendedPresets.push(preset);
+      this.save();
+      return preset;
+    },
+
+    updateExtendedPreset(id: string, data: Partial<Omit<ExtendedPreset, 'id' | 'createdAt'>>) {
+      const preset = this.extendedPresets.find(p => p.id === id);
+      if (!preset) return false;
+      
+      Object.assign(preset, data, { updatedAt: new Date().toISOString() });
+      this.save();
+      return true;
+    },
+
+    deleteExtendedPreset(id: string) {
+      const index = this.extendedPresets.findIndex(p => p.id === id);
+      if (index === -1) return false;
+      
+      this.extendedPresets.splice(index, 1);
+      this.save();
+      return true;
+    },
+
+    createPresetFolder(data: Omit<PresetFolder, 'id' | 'createdAt' | 'updatedAt'>) {
+      const now = new Date().toISOString();
+      const folder: PresetFolder = {
+        id: `folder_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        createdAt: now,
+        updatedAt: now,
+        ...data
+      };
+      
+      this.presetFolders.push(folder);
+      this.save();
+      return folder;
+    },
+
+    updatePresetFolder(id: string, data: Partial<Omit<PresetFolder, 'id' | 'createdAt'>>) {
+      const folder = this.presetFolders.find(f => f.id === id);
+      if (!folder) return false;
+      
+      Object.assign(folder, data, { updatedAt: new Date().toISOString() });
+      this.save();
+      return true;
+    },
+
+    deletePresetFolder(id: string) {
+      const index = this.presetFolders.findIndex(f => f.id === id);
+      if (index === -1) return false;
+      
+      // 将该文件夹下的预设移动到未分类
+      this.extendedPresets.forEach(preset => {
+        if (preset.folderId === id) {
+          preset.folderId = undefined;
+          preset.updatedAt = new Date().toISOString();
+        }
+      });
+      
+      // 删除子文件夹或将其移动到父级
+      const folder = this.presetFolders[index];
+      if (folder) {
+        this.presetFolders.forEach(f => {
+          if (f.parentId === id) {
+            f.parentId = folder.parentId;
+            f.updatedAt = new Date().toISOString();
+          }
+        });
+      }
+      
+      this.presetFolders.splice(index, 1);
+      this.save();
+      return true;
+    },
+
+    importExtendedPresets(data: { folders?: PresetFolder[]; presets?: ExtendedPreset[] }) {
+      if (data.folders) {
+        // 合并文件夹，避免ID冲突
+        data.folders.forEach(folder => {
+          const existingFolder = this.presetFolders.find(f => f.name === folder.name);
+          if (existingFolder) {
+            // 更新现有文件夹
+            Object.assign(existingFolder, folder, { 
+              id: existingFolder.id,
+              updatedAt: new Date().toISOString() 
+            });
+          } else {
+            // 创建新文件夹，重新生成ID
+            const newFolder = {
+              ...folder,
+              id: `folder_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            this.presetFolders.push(newFolder);
+          }
+        });
+      }
+      
+      if (data.presets) {
+        // 合并预设，避免ID冲突
+        data.presets.forEach(preset => {
+          const existingPreset = this.extendedPresets.find(p => p.name === preset.name && p.type === preset.type);
+          if (existingPreset) {
+            // 更新现有预设
+            Object.assign(existingPreset, preset, { 
+              id: existingPreset.id,
+              updatedAt: new Date().toISOString() 
+            });
+          } else {
+            // 创建新预设，重新生成ID
+            const newPreset = {
+              ...preset,
+              id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            this.extendedPresets.push(newPreset);
+          }
+        });
+      }
+      
+      this.save();
+    },
+
+    // 兼容性：从旧预设迁移到新预设系统
+    migrateOldPresets() {
+      if (this.presets.length === 0) return; // 没有旧预设需要迁移
+      
+      console.log(`开始迁移 ${this.presets.length} 个旧预设到新系统...`);
+      
+      let migratedCount = 0;
+      const defaultFolder = this.presetManagement?.settings?.defaultFolder;
+      
+      this.presets.forEach(oldPreset => {
+        const existingExtended = this.extendedPresets.find(p => 
+          p.name === oldPreset.name && p.type === 'positive'
+        );
+        
+        if (!existingExtended) {
+          // 创建新的扩展预设，但不触发保存（避免递归）
+          const now = new Date().toISOString();
+          const preset: ExtendedPreset = {
+            id: `migrated_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            name: oldPreset.name,
+            type: 'positive',
+            content: oldPreset.text,
+            description: '从旧版快速预设自动迁移',
+            folderId: defaultFolder,
+            createdAt: oldPreset.updatedAt,
+            updatedAt: oldPreset.updatedAt
+          };
+          
+          this.extendedPresets.push(preset);
+          migratedCount++;
+        }
+      });
+      
+      if (migratedCount > 0) {
+        console.log(`成功迁移 ${migratedCount} 个预设到新系统`);
+        // 清空旧预设数组，完成迁移
+        this.presets = [];
+        console.log('旧预设已清空，迁移完成');
+      }
+    },
+
+    // 检查并处理版本兼容性
+    ensureCompatibility(bundle: ExportBundle) {
+      // 如果是旧版本的导出文件，确保新字段存在
+      if (!bundle.extendedPresets && bundle.presets && bundle.presets.length > 0) {
+        // 自动迁移旧预设到新系统
+        bundle.extendedPresets = bundle.presets.map(preset => ({
+          id: `migrated_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+          name: preset.name,
+          type: 'positive' as PresetType,
+          content: preset.text,
+          description: '从旧版本自动迁移',
+          createdAt: preset.updatedAt,
+          updatedAt: preset.updatedAt
+        }));
+      }
+      
+      if (!bundle.presetFolders) {
+        bundle.presetFolders = [];
+      }
+      
+      if (!bundle.presetManagement) {
+        bundle.presetManagement = {
+          folders: [],
+          presets: [],
+          settings: {
+            autoBackup: true,
+            maxPresets: 1000
+          }
+        };
+      }
+      
+      return bundle;
     },
   },
 });

@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { LangCode } from '../types';
 import NotificationToast from './NotificationToast.vue';
+import PresetDropdown from './PresetDropdown.vue';
 
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
@@ -14,9 +15,6 @@ const editingValue = ref('');
 const addingMapIndex = ref<number | null>(null);
 const addingMapValue = ref('');
 const presetName = ref('');
-const presetSearch = ref('');
-const renamingPreset = ref<string | null>(null);
-const renamingValue = ref('');
 const viewMode = ref<'compact' | 'detail'>('compact');
 const showPresetDropdown = ref(false);
 const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ 
@@ -35,7 +33,8 @@ function showNotification(message: string, type: 'success' | 'error' | 'info' = 
 // 点击外部关闭下拉菜单
 function handleClickOutside(event: Event) {
   const target = event.target as HTMLElement;
-  if (!target.closest('.pe-presets')) {
+  // 检查点击是否在预设下拉区域内，包括重命名输入框和按钮
+  if (!target.closest('.pe-presets') && !target.closest('.pd-dropdown')) {
     showPresetDropdown.value = false;
   }
 }
@@ -55,12 +54,6 @@ const selectedLang = computed({
 });
 
 const tokens = computed(() => store.tokens);
-const filteredPresets = computed(() => {
-  const q = presetSearch.value.trim().toLowerCase();
-  const list = [...store.presets].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
-  if (!q) return list;
-  return list.filter((p) => p.name.toLowerCase().includes(q));
-});
 
 const suggestions = ref<string[]>([]);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
@@ -278,31 +271,52 @@ function savePreset() {
     showNotification('请输入预设名称', 'error'); 
     return; 
   }
-  store.savePreset(presetName.value.trim());
-  showNotification(`预设「${presetName.value.trim()}」已保存`, 'success');
+  
+  const name = presetName.value.trim();
+  
+  // 只保存到新的扩展预设系统
+  const defaultFolder = store.presetManagement?.settings?.defaultFolder;
+  store.createExtendedPreset({
+    name: name,
+    type: 'positive',
+    content: store.promptText,
+    description: '从编辑器快速保存',
+    folderId: defaultFolder
+  });
+  
+  showNotification(`预设「${name}」已保存到预设管理`, 'success');
   presetName.value = '';
 }
-function loadPreset(name: string) { 
-  store.loadPreset(name); 
-  text.value = store.promptText; 
+
+// 预设下拉组件的事件处理
+function handlePresetLoad(name: string) {
+  // 优先从扩展预设中查找
+  const extendedPreset = store.extendedPresets.find(p => p.name === name);
+  if (extendedPreset) {
+    store.setPromptTextRaw(extendedPreset.content);
+    text.value = extendedPreset.content;
+  } else {
+    // 回退到旧预设系统
+    store.loadPreset(name);
+    text.value = store.promptText;
+  }
   showNotification(`已加载预设「${name}」`, 'success');
 }
-function deletePreset(name: string) { 
-  if (confirm(`确定删除预设「${name}」吗？`)) {
-    store.deletePreset(name);
-    showNotification(`预设「${name}」已删除`, 'info');
-  }
+
+function handlePresetSave(name: string) {
+  store.savePreset(name);
+  showNotification(`预设「${name}」已保存`, 'success');
 }
-function beginRename(name: string) { renamingPreset.value = name; renamingValue.value = name; }
-function commitRename() {
-  if (!renamingPreset.value) return;
-  const oldName = renamingPreset.value;
-  const newName = renamingValue.value.trim();
-  if (!newName) { alert('预设名称不能为空'); return; }
+
+function handlePresetDelete(name: string) {
+  store.deletePreset(name);
+  showNotification(`预设「${name}」已删除`, 'info');
+}
+
+function handlePresetRename(oldName: string, newName: string) {
   store.renamePreset(oldName, newName);
-  renamingPreset.value = null; renamingValue.value = '';
+  showNotification(`预设已重命名为「${newName}」`, 'success');
 }
-function cancelRename() { renamingPreset.value = null; }
 
 async function applySuggestion(s: string) {
   const el = inputEl.value;
@@ -355,12 +369,12 @@ function displayTrans(key: string): string {
           <button 
             class="pe-preset-toggle" 
             @click="showPresetDropdown = !showPresetDropdown"
-            title="管理预设"
+            title="快速预设"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 4h18v2H3V4zm0 7h18v2H3v-2zm0 7h18v2H3v-2z" fill="currentColor"/>
             </svg>
-            预设管理
+            快速预设
             <svg 
               width="12" height="12" 
               viewBox="0 0 24 24" 
@@ -373,31 +387,14 @@ function displayTrans(key: string): string {
             </svg>
           </button>
           
-          <Transition name="dropdown">
-            <div v-if="showPresetDropdown" class="pe-preset-dropdown">
-              <div class="pe-preset-search-wrapper">
-                <input class="pe-preset-search" placeholder="搜索预设..." v-model="presetSearch" />
-              </div>
-          <div class="pe-preset-list" v-if="filteredPresets.length">
-            <div v-for="p in filteredPresets" :key="p.name" class="pe-preset-item">
-              <template v-if="renamingPreset !== p.name">
-                <button class="pe-preset-load" title="加载" @click="loadPreset(p.name)">{{ p.name }}</button>
-                <span class="pe-preset-meta">{{ new Date(p.updatedAt).toLocaleString() }}</span>
-                <button class="pe-preset-rename" title="重命名" @click="beginRename(p.name)">✎</button>
-                <button class="pe-preset-delete" title="删除" @click="deletePreset(p.name)">🗑</button>
-              </template>
-              <template v-else>
-                <input class="pe-preset-rename-input" v-model="renamingValue" @keyup.enter="commitRename" />
-                <button class="pe-preset-rename-ok" @click="commitRename">确定</button>
-                <button class="pe-preset-rename-cancel" @click="cancelRename">取消</button>
-              </template>
-            </div>
-          </div>
-              <div v-else class="pe-preset-empty">
-                <span>{{ presetSearch ? '未找到匹配的预设' : '暂无预设' }}</span>
-              </div>
-            </div>
-          </Transition>
+          <PresetDropdown 
+            :show="showPresetDropdown"
+            @close="showPresetDropdown = false"
+            @load="handlePresetLoad"
+            @save="handlePresetSave"
+            @delete="handlePresetDelete"
+            @rename="handlePresetRename"
+          />
         </div>
       </div>
     </header>
@@ -437,6 +434,7 @@ function displayTrans(key: string): string {
           <li v-for="s in suggestions" :key="s" @click="applySuggestion(s)">{{ s }}</li>
         </ul>
       </section>
+      
       <section class="pe-right-pane">
         <div class="pe-section-title mode">
           <span>提示词映射</span>
@@ -1702,6 +1700,7 @@ function displayTrans(key: string): string {
 .pe-preset-list::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-tertiary);
 }
+
 
 /* 保证按钮内图标不压缩文本，提升对齐与可读性 */
 .pe-left button svg,

@@ -2,9 +2,10 @@
 import { ref, onMounted } from 'vue'
 import PromptEditor from './components/PromptEditor.vue'
 import PromptManager from './components/PromptManager.vue'
+import PresetManager from './components/PresetManager.vue'
 import { usePromptStore } from './stores/promptStore'
 
-const currentView = ref<'editor' | 'manager'>('editor')
+const currentView = ref<'editor' | 'manager' | 'presets'>('editor')
 const isDark = ref(false)
 const store = usePromptStore()
 
@@ -27,7 +28,7 @@ function updateTheme() {
   document.documentElement.classList.toggle('dark', isDark.value)
 }
 
-function switchView(view: 'editor' | 'manager') {
+function switchView(view: 'editor' | 'manager' | 'presets') {
   currentView.value = view
 }
 </script>
@@ -63,7 +64,7 @@ function switchView(view: 'editor' | 'manager') {
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            编辑器
+            <span>编辑器</span>
           </button>
           <button 
             class="nav-btn" 
@@ -73,7 +74,19 @@ function switchView(view: 'editor' | 'manager') {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 3h18v18H3zM9 9h6v6H9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            词库管理
+            <span>词库管理</span>
+          </button>
+          <button 
+            class="nav-btn" 
+            :class="{ active: currentView === 'presets' }"
+            @click="switchView('presets')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/>
+              <polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" stroke-width="2"/>
+              <polyline points="7,3 7,8 15,8" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <span>预设管理</span>
           </button>
         </nav>
 
@@ -95,7 +108,8 @@ function switchView(view: 'editor' | 'manager') {
     <main class="app-main">
       <Transition name="view-transition" mode="out-in">
         <PromptEditor v-if="currentView === 'editor'" key="editor" />
-        <PromptManager v-else key="manager" />
+        <PromptManager v-else-if="currentView === 'manager'" key="manager" />
+        <PresetManager v-else-if="currentView === 'presets'" key="presets" />
       </Transition>
     </main>
   </div>

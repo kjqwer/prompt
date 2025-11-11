@@ -31,6 +31,10 @@ export interface ExportBundle {
   dataset?: PromptDataset; // full snapshot (used for localStorage persistence)
   customDiff?: CustomDiff; // only user-defined changes for export/import
   presets?: PromptPreset[]; // saved prompt texts by name
+  // 新的扩展预设管理
+  extendedPresets?: ExtendedPreset[];
+  presetFolders?: PresetFolder[];
+  presetManagement?: PresetManagement;
   // editor state persistence
   promptText?: string;
   selectedLang?: LangCode;
@@ -64,4 +68,44 @@ export interface PromptPreset {
   name: string;
   text: string;
   updatedAt: string;
+}
+
+// 新的预设类型枚举
+export type PresetType = 'positive' | 'negative' | 'setting' | 'style' | 'character' | 'scene' | 'custom';
+
+// 扩展的预设接口
+export interface ExtendedPreset {
+  id: string;
+  name: string;
+  type: PresetType;
+  content: string;
+  description?: string;
+  tags?: string[];
+  folderId?: string;
+  createdAt: string;
+  updatedAt: string;
+  isPublic?: boolean;
+  author?: string;
+}
+
+// 预设文件夹
+export interface PresetFolder {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  parentId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 预设管理数据结构
+export interface PresetManagement {
+  folders: PresetFolder[];
+  presets: ExtendedPreset[];
+  settings: {
+    defaultFolder?: string;
+    autoBackup: boolean;
+    maxPresets: number;
+  };
 }
