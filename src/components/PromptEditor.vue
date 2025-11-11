@@ -1703,7 +1703,6 @@ function displayTrans(key: string): string {
   background: var(--color-text-tertiary);
 }
 
-</style>
 /* 保证按钮内图标不压缩文本，提升对齐与可读性 */
 .pe-left button svg,
 .pe-right button svg,
@@ -1711,3 +1710,4 @@ function displayTrans(key: string): string {
 .pe-preset-toggle svg {
   flex-shrink: 0;
 }
+</style>
