@@ -203,6 +203,7 @@ function resetDefault() {
 .pm-empty { color: #6b7280; padding: 20px; }
 .pm-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .pm-tags li { display: grid; grid-template-columns: 24px 1fr 1fr auto auto; align-items: center; gap: 6px; padding: 6px; border: 1px solid #e5e7eb; border-radius: 6px; }
+.pm-tags li { will-change: transform; }
 .pm-tags li.hidden { opacity: 0.5; }
 .pm-handle { cursor: grab; user-select: none; color: #6b7280; text-align: center; }
 .pm-key, .pm-trans { padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; }

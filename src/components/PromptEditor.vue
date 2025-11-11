@@ -7,6 +7,8 @@ import NotificationToast from './NotificationToast.vue';
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
 const overIndex = ref<number | null>(null);
+const dragPreview = ref<HTMLElement | null>(null);
+const isDragging = ref(false);
 const editingIndex = ref<number | null>(null);
 const editingValue = ref('');
 const addingMapIndex = ref<number | null>(null);
@@ -120,27 +122,129 @@ async function copyLeft() {
 function replaceCnComma() { store.replaceChineseComma(); text.value = store.promptText; }
 function formatPrompt() { store.formatPrompt(); text.value = store.promptText; }
 
+// 新增功能方法
+function toggleUnderscoreSpace() { 
+  store.toggleUnderscoreSpace(); 
+  text.value = store.promptText; 
+  showNotification('已切换下划线/空格格式', 'success');
+}
+
+function addWrapperToToken(index: number) { 
+  store.addWrapperToToken(index, '{}'); 
+  text.value = store.promptText; 
+  showNotification('已添加包裹层 {}', 'success');
+}
+
+function removeWrapperFromToken(index: number) { 
+  store.removeWrapperFromToken(index); 
+  text.value = store.promptText; 
+  showNotification('已移除外层包裹', 'success');
+}
+
+function getTokenWrapperInfo(token: string) {
+  return store.getTokenWrapperInfo(token);
+}
+
 function onDragStart(index: number, e: DragEvent) { 
-  draggingIndex.value = index; 
+  draggingIndex.value = index;
+  isDragging.value = true;
+  
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', tokens.value[index] || '');
+    
+    // 创建自定义拖拽预览
+    const dragElement = e.target as HTMLElement;
+    const token = tokens.value[index] || '';
+    const translation = displayTrans(token);
+    
+    // 创建预览元素
+    const preview = document.createElement('div');
+    preview.className = 'drag-preview';
+    preview.innerHTML = `
+      <div class="drag-preview-content">
+        <span class="drag-preview-key">${token}</span>
+        <span class="drag-preview-arrow">→</span>
+        <span class="drag-preview-trans">${translation}</span>
+      </div>
+    `;
+    
+    // 设置预览样式（减少布局与重绘）
+    preview.style.position = 'fixed';
+    preview.style.top = '0';
+    preview.style.left = '0';
+    preview.style.zIndex = '1000';
+    preview.style.pointerEvents = 'none';
+    preview.style.visibility = 'hidden';
+    // 降低绘制成本
+    ;(preview.style as any).contain = 'layout style paint';
+    preview.style.willChange = 'transform, opacity';
+    
+    document.body.appendChild(preview);
+    dragPreview.value = preview;
+    
+    // 设置拖拽图像
+    e.dataTransfer.setDragImage(preview, 0, 0);
+    
+    // 预览节点在 dragend 中统一清理，避免频繁移除导致卡顿
   }
 }
+
 function onDragOver(index: number, e: DragEvent) { 
   e.preventDefault(); 
+  if (draggingIndex.value === null) return;
+  
   e.dataTransfer!.dropEffect = 'move';
-  overIndex.value = index; 
+  
+  // 只有当拖拽到不同位置时才更新
+  if (overIndex.value !== index) {
+    overIndex.value = index;
+  }
 }
-function onDragLeave() {
-  overIndex.value = null;
+
+function onDragEnter(index: number, e: DragEvent) {
+  e.preventDefault();
+  if (draggingIndex.value !== null && draggingIndex.value !== index) {
+    overIndex.value = index;
+  }
 }
+
+function onDragLeave(e: DragEvent) {
+  // 只有当离开整个拖拽区域时才清除
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const x = e.clientX;
+  const y = e.clientY;
+  
+  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    overIndex.value = null;
+  }
+}
+
 function onDrop(index: number, e: DragEvent) {
   e.preventDefault();
   if (draggingIndex.value == null) return;
+  
+  // 执行重排序
   store.reorderTokens(draggingIndex.value, index);
+  
+  // 重置状态
   draggingIndex.value = null; 
   overIndex.value = null;
+  isDragging.value = false;
+  
+  showNotification('已重新排序', 'success');
+}
+
+function onDragEnd() {
+  // 清理拖拽状态
+  draggingIndex.value = null;
+  overIndex.value = null;
+  isDragging.value = false;
+  
+  if (dragPreview.value) {
+    document.body.removeChild(dragPreview.value);
+    dragPreview.value = null;
+  }
 }
 
 function beginEdit(i: number) {
@@ -321,6 +425,14 @@ function displayTrans(key: string): string {
             </svg>
             格式化提示词
           </button>
+          <button @click="toggleUnderscoreSpace" title="切换下划线和空格格式">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 12h18" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 8l4-4 4 4" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 16l4 4 4-4" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            切换 _/空格
+          </button>
         </div>
         <ul class="pe-suggest" v-if="suggestions.length">
           <li v-for="s in suggestions" :key="s" @click="applySuggestion(s)">{{ s }}</li>
@@ -334,6 +446,8 @@ function displayTrans(key: string): string {
             <button :class="{ active: viewMode==='detail' }" @click="viewMode='detail'">详细视图</button>
           </div>
         </div>
+        
+        <div class="pe-drag-container" :class="{ 'is-dragging': isDragging }">
         <div class="pe-tokens-compact" v-if="viewMode === 'compact'">
           <div
             v-for="(k,i) in tokens"
@@ -341,13 +455,16 @@ function displayTrans(key: string): string {
             :draggable="true"
             :class="{ 
               'dragging': draggingIndex === i, 
-              'drag-over': overIndex === i && draggingIndex !== i 
+              'drag-over': overIndex === i && draggingIndex !== i,
+              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i
             }"
             class="pe-token-compact"
             @dragstart="onDragStart(i, $event)"
             @dragover="onDragOver(i, $event)"
+            @dragenter="onDragEnter(i, $event)"
             @dragleave="onDragLeave"
             @drop="onDrop(i, $event)"
+            @dragend="onDragEnd"
             @dblclick="beginEdit(i)"
             :title="`${k} → ${displayTrans(k)}`"
           >
@@ -359,14 +476,34 @@ function displayTrans(key: string): string {
                 {{ displayTrans(k) }}
               </span>
             </div>
-            <button @click="removeToken(i)" class="pe-remove-btn" title="删除此词">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/>
-                <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+            <div class="pe-token-controls-compact">
+              <button @click="addWrapperToToken(i)" class="pe-add-wrapper-btn" title="添加包裹层 {}">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="2"/>
+                  <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+              <button 
+                @click="removeWrapperFromToken(i)" 
+                class="pe-remove-wrapper-btn" 
+                title="移除包裹层"
+                :disabled="getTokenWrapperInfo(k).wrapperCount === 0"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+              <button @click="removeToken(i)" class="pe-remove-btn" title="删除此词">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/>
+                  <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+              </div>
+              </div>
+              </div>
 
         <div class="pe-tokens-detail" v-else>
           <div
@@ -376,13 +513,16 @@ function displayTrans(key: string): string {
             :class="{ 
               'dragging': draggingIndex === i, 
               'drag-over': overIndex === i && draggingIndex !== i,
+              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i,
               'editing': editingIndex === i || addingMapIndex === i
             }"
             class="pe-token-detail"
             @dragstart="onDragStart(i, $event)"
             @dragover="onDragOver(i, $event)"
+            @dragenter="onDragEnter(i, $event)"
             @dragleave="onDragLeave"
             @drop="onDrop(i, $event)"
+            @dragend="onDragEnd"
           >
             <div class="pe-token-header">
               <span class="pe-handle-detail">⋮⋮</span>
@@ -396,6 +536,24 @@ function displayTrans(key: string): string {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
                     <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>
+                  </svg>
+                </button>
+                <button @click="addWrapperToToken(i)" class="pe-add-wrapper-detail-btn" title="添加包裹层 {}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="2"/>
+                    <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2"/>
+                  </svg>
+                </button>
+                <button 
+                  @click="removeWrapperFromToken(i)" 
+                  class="pe-remove-wrapper-detail-btn" 
+                  title="移除包裹层"
+                  :disabled="getTokenWrapperInfo(k).wrapperCount === 0"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
+                    <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="2"/>
                   </svg>
                 </button>
                 <button class="pe-add-after-btn" @click="addTokenAfter(i)" title="在后添加">
@@ -430,6 +588,7 @@ function displayTrans(key: string): string {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </section>
     </main>
@@ -966,6 +1125,50 @@ function displayTrans(key: string): string {
   transform: scale(1.05);
 }
 
+/* 精简视图的包裹层控制按钮 */
+.pe-token-controls-compact {
+  display: flex;
+  gap: 0.125rem;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.pe-token-compact:hover .pe-token-controls-compact {
+  opacity: 1;
+}
+
+.pe-add-wrapper-btn, .pe-remove-wrapper-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.pe-add-wrapper-btn:hover {
+  background-color: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.pe-remove-wrapper-btn:hover:not(:disabled) {
+  background-color: var(--color-warning);
+  color: white;
+  border-color: var(--color-warning);
+}
+
+.pe-remove-wrapper-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 /* 详细列表视图 */
 .pe-tokens-detail {
   display: flex;
@@ -1089,7 +1292,8 @@ function displayTrans(key: string): string {
   opacity: 1;
 }
 
-.pe-add-map-btn, .pe-add-after-btn, .pe-remove-detail-btn {
+.pe-add-map-btn, .pe-add-after-btn, .pe-remove-detail-btn, 
+.pe-add-wrapper-detail-btn, .pe-remove-wrapper-detail-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1113,6 +1317,23 @@ function displayTrans(key: string): string {
   background-color: var(--color-success);
   color: white;
   border-color: var(--color-success);
+}
+
+.pe-add-wrapper-detail-btn:hover {
+  background-color: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.pe-remove-wrapper-detail-btn:hover:not(:disabled) {
+  background-color: var(--color-warning);
+  color: white;
+  border-color: var(--color-warning);
+}
+
+.pe-remove-wrapper-detail-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .pe-remove-detail-btn:hover {
@@ -1264,6 +1485,10 @@ function displayTrans(key: string): string {
     opacity: 1;
   }
   
+  .pe-token-controls-compact {
+    opacity: 1;
+  }
+  
   .pe-edit-actions, .pe-add-actions {
     flex-direction: column;
   }
@@ -1299,6 +1524,123 @@ function displayTrans(key: string): string {
 .pe-token-compact[draggable="true"]:hover .pe-handle-compact,
 .pe-token-detail[draggable="true"]:hover .pe-handle-detail {
   color: var(--color-accent);
+}
+
+/* 拖拽预览样式 */
+.drag-preview {
+  background-color: var(--color-bg-primary);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  box-shadow: var(--shadow-md);
+  opacity: 0.9;
+}
+
+.drag-preview-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.drag-preview-key {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-tertiary);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.drag-preview-arrow {
+  color: var(--color-text-tertiary);
+  font-weight: 500;
+}
+
+.drag-preview-trans {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+/* 拖拽占位符样式 */
+.pe-token-compact.drag-placeholder,
+.pe-token-detail.drag-placeholder {
+  position: relative;
+}
+
+.pe-token-compact.drag-placeholder::before,
+.pe-token-detail.drag-placeholder::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  background-color: var(--color-accent-light);
+  opacity: 0.3;
+  animation: pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.2;
+  }
+  to {
+    opacity: 0.5;
+  }
+}
+
+/* 改进拖拽中的样式 */
+.pe-token-compact.dragging,
+.pe-token-detail.dragging {
+  opacity: 0.3;
+  transform: scale(0.95) rotate(2deg);
+  cursor: grabbing;
+  z-index: 1000;
+  box-shadow: var(--shadow-lg);
+}
+
+.pe-token-compact.drag-over,
+.pe-token-detail.drag-over {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-light);
+  transform: scale(1.02);
+  transition: all 0.2s ease;
+}
+
+/* 拖拽容器样式 */
+.pe-drag-container {
+  position: relative;
+  min-height: 200px;
+  transition: all 0.1s ease;
+}
+
+.pe-drag-container.is-dragging {
+  background-color: var(--color-bg-secondary);
+  border: 2px dashed var(--color-accent);
+  border-radius: var(--radius-lg);
+  padding: 0.5rem;
+}
+
+.pe-drag-container.is-dragging::after {
+  content: '拖拽到此处重新排序';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* 预先启用复合层以提升拖拽流畅度 */
+.pe-token-compact,
+.pe-token-detail {
+  will-change: transform;
 }
 
 /* 加载和过渡动画 */

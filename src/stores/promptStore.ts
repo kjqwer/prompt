@@ -32,12 +32,19 @@ export const usePromptStore = defineStore('promptStore', {
       const grp = this.currentGroup;
       if (!grp) return [] as PromptTag[];
       const q = this.searchQuery.trim().toLowerCase();
+      const qNorm = q.replace(/_/g, ' ');
       if (!q) return grp.tags;
       return grp.tags.filter((t) => {
         const trans = t.translation?.[this.selectedLang] ?? '';
+        const keyLower = t.key.toLowerCase();
+        const keyNorm = keyLower.replace(/_/g, ' ');
+        const transLower = trans.toLowerCase();
+        const transNorm = transLower.replace(/_/g, ' ');
         return (
-          t.key.toLowerCase().includes(q) ||
-          trans.toLowerCase().includes(q)
+          keyLower.includes(q) ||
+          keyNorm.includes(qNorm) ||
+          transLower.includes(q) ||
+          transNorm.includes(qNorm)
         );
       });
     },
@@ -202,6 +209,113 @@ export const usePromptStore = defineStore('promptStore', {
     formatPrompt() {
       this.promptText = normalizePrompt(this.promptText);
     },
+    // 切换下划线和空格
+    toggleUnderscoreSpace() {
+      const tokens = splitTokens(this.promptText);
+      const newTokens = tokens.map(token => {
+        // 解析包裹层数和核心内容
+        const { core, wrappers } = this.parseTokenWrappers(token);
+        
+        // 切换下划线和空格
+        let newCore;
+        if (core.includes('_')) {
+          newCore = core.replace(/_/g, ' ');
+        } else if (core.includes(' ')) {
+          newCore = core.replace(/ /g, '_');
+        } else {
+          newCore = core;
+        }
+        
+        // 重新包装
+        return this.wrapToken(newCore, wrappers);
+      });
+      this.promptText = newTokens.join(', ');
+    },
+    // 为单个token添加包裹层
+    addWrapperToToken(index: number, wrapperType: string = '{}') {
+      const tokens = splitTokens(this.promptText);
+      if (index < 0 || index >= tokens.length) return;
+      
+      const token = tokens[index];
+      if (!token) return;
+      const { core, wrappers } = this.parseTokenWrappers(token);
+      const newWrappers = [...wrappers, wrapperType];
+      tokens[index] = this.wrapToken(core, newWrappers);
+      
+      this.promptText = tokens.join(', ');
+    },
+    // 为单个token移除包裹层
+    removeWrapperFromToken(index: number) {
+      const tokens = splitTokens(this.promptText);
+      if (index < 0 || index >= tokens.length) return;
+      
+      const token = tokens[index];
+      if (!token) return;
+      const { core, wrappers } = this.parseTokenWrappers(token);
+      if (wrappers.length > 0) {
+        const newWrappers = wrappers.slice(0, -1);
+        tokens[index] = this.wrapToken(core, newWrappers);
+        this.promptText = tokens.join(', ');
+      }
+    },
+    // 获取token的包裹信息（用于显示）
+    getTokenWrapperInfo(token: string): { core: string; wrappers: string[]; wrapperCount: number } {
+      const { core, wrappers } = this.parseTokenWrappers(token);
+      return { core, wrappers, wrapperCount: wrappers.length };
+    },
+    // 解析token的包裹层和核心内容
+    parseTokenWrappers(token: string): { core: string; wrappers: string[] } {
+      const wrapperPairs = [
+        ['{}', '{', '}'],
+        ['()', '(', ')'],
+        ['[]', '[', ']'],
+        ['<>', '<', '>']
+      ];
+      
+      let current = token.trim();
+      const wrappers: string[] = [];
+      
+      // 从外到内解析包裹层
+      while (current.length >= 2) {
+        let found = false;
+        for (const [type, start, end] of wrapperPairs) {
+          if (start && end && current.startsWith(start) && current.endsWith(end)) {
+            if (type) wrappers.push(type);
+            current = current.slice(start.length, -end.length);
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
+      }
+      
+      return { core: current, wrappers };
+    },
+    // 用包裹层包装token
+    wrapToken(core: string, wrappers: string[]): string {
+      let result = core;
+      
+      // 从内到外添加包裹层
+      for (let i = wrappers.length - 1; i >= 0; i--) {
+        const wrapper = wrappers[i];
+        switch (wrapper) {
+          case '{}':
+            result = `{${result}}`;
+            break;
+          case '()':
+            result = `(${result})`;
+            break;
+          case '[]':
+            result = `[${result}]`;
+            break;
+          case '<>':
+            result = `<${result}>`;
+            break;
+        }
+      }
+      
+      return result;
+    },
     updateToken(index: number, newToken: string) {
       const tokens = splitTokens(this.promptText);
       if (index < 0 || index >= tokens.length) return;
@@ -227,10 +341,13 @@ export const usePromptStore = defineStore('promptStore', {
       this.promptText = tokens.join(', ');
     },
     getTagByKey(key: string): PromptTag | null {
+      const target = normalizeKeyForMatch(key);
       for (const cat of this.dataset?.categories || []) {
         for (const g of cat.groups) {
-          const t = g.tags.find((x) => x.key === key);
-          if (t) return t;
+          for (const t of g.tags) {
+            if (t.key === key) return t; // 精确匹配优先
+            if (normalizeKeyForMatch(t.key) === target) return t; // 下划线/空格归一化匹配
+          }
         }
       }
       return null;
@@ -244,13 +361,16 @@ export const usePromptStore = defineStore('promptStore', {
       const list: string[] = [];
       const seen = new Set<string>();
       const p = prefix.trim().toLowerCase();
+      const pNorm = p.replace(/_/g, ' ');
       if (!p) return [];
       for (const cat of this.dataset?.categories || []) {
         for (const g of cat.groups) {
           for (const t of g.tags) {
             const k = t.key;
             if (seen.has(k)) continue;
-            if (k.toLowerCase().includes(p)) {
+            const kLower = k.toLowerCase();
+            const kNorm = kLower.replace(/_/g, ' ');
+            if (kLower.includes(p) || kNorm.includes(pNorm)) {
               list.push(k);
               seen.add(k);
               if (list.length >= limit) return list;
@@ -489,4 +609,9 @@ function normalizeToken(t: string): string {
 }
 function normalizePrompt(text: string): string {
   return splitTokens(text).join(', ');
+}
+
+// 归一化用于匹配的 key：统一大小写与下划线/空格
+function normalizeKeyForMatch(s: string): string {
+  return s.trim().toLowerCase().replace(/_/g, ' ');
 }
