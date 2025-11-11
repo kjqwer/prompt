@@ -124,7 +124,7 @@ function resetDefault() {
       </div>
       <div class="pm-right">
         <button class="pm-btn" @click="exportAll">导出 JSON</button>
-        <span class="pm-tip">导出 JSON 会同时包含你的预设</span>
+        <span class="pm-tip">导出 JSON 仅包含词库（不包含预设）</span>
         <label class="pm-import pm-btn">导入 JSON
           <input type="file" accept="application/json" @change="importAll" />
         </label>

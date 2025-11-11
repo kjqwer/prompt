@@ -141,45 +141,48 @@ export const usePromptStore = defineStore('promptStore', {
       if (!bundle) {
         if (!baseline) baseline = await loadInitialDataset();
         this.dataset = deepClone(baseline!);
-        this.presets = [];
-        this.extendedPresets = [];
-        this.presetFolders = [];
+        // 重置时不清空预设数据，只重置词库
       } else {
-        // 确保兼容性
-        bundle = this.ensureCompatibility(bundle);
-        
+        // 词库导入：只处理词库相关数据，不影响预设
         if (bundle.dataset) {
           this.dataset = bundle.dataset;
         } else if (bundle.customDiff) {
           if (!baseline) baseline = await loadInitialDataset();
           this.dataset = this.applyDiff(deepClone(baseline!), bundle.customDiff);
         }
-        this.presets = bundle.presets || [];
-        // 导入扩展预设数据
-        this.extendedPresets = bundle.extendedPresets || [];
-        this.presetFolders = bundle.presetFolders || [];
-        if (bundle.presetManagement) {
-          this.presetManagement = bundle.presetManagement;
+        
+        // 兼容旧版本：如果导入的是包含预设的旧格式，提示用户使用预设导入功能
+        if (bundle.presets || bundle.extendedPresets || bundle.presetFolders) {
+          console.warn('检测到预设数据，请使用预设管理页面的导入功能来导入预设数据');
         }
       }
       this.selectedCategoryIndex = 0;
       this.selectedGroupIndex = 0;
-      // 确保扩展预设管理已初始化
-      this.initializeExtendedPresets();
       this.save();
     },
     exportToJson(): string {
-      // 导出仅包含自定义差异（不包含公共词库）
+      // 词库导出：仅包含自定义差异（不包含公共词库和预设数据）
       const diff = this.buildDiff(baseline!, this.dataset!);
       const bundle: ExportBundle = {
         version: 1,
         savedAt: new Date().toISOString(),
         customDiff: diff,
-        presets: deepClone(this.presets),
-        // 导出扩展预设数据
+        // 词库导出不包含预设数据
+      };
+      return JSON.stringify(bundle, null, 2);
+    },
+
+    // 预设导出：仅导出预设相关数据
+    exportPresetsToJson(): string {
+      const bundle = {
+        version: 1,
+        type: 'presets',
+        savedAt: new Date().toISOString(),
         extendedPresets: deepClone(this.extendedPresets),
         presetFolders: deepClone(this.presetFolders),
         presetManagement: deepClone(this.presetManagement),
+        // 保留旧预设以兼容
+        presets: deepClone(this.presets),
       };
       return JSON.stringify(bundle, null, 2);
     },
@@ -809,6 +812,118 @@ export const usePromptStore = defineStore('promptStore', {
       }
       
       this.save();
+    },
+
+    // 预设导入：专门处理预设导入文件
+    importPresetsFromJson(jsonData: string): boolean {
+      try {
+        const data = JSON.parse(jsonData);
+
+        // 仅处理预设相关的导入文件
+        if (!(data.type === 'presets' || data.extendedPresets || data.presetFolders || data.presets)) {
+          return false;
+        }
+
+        // 1) 构建旧ID到新ID的映射，按名称合并已存在的文件夹
+        const idMap = new Map<string, string>();
+        const existingByName = new Map((this.presetFolders || []).map((f) => [f.name, f]));
+
+        const foldersToCreate: any[] = [];
+        const incomingFolders: any[] = Array.isArray(data.presetFolders) ? data.presetFolders : [];
+
+        // 先确定每个旧ID对应的新ID（复用同名文件夹，否则生成新ID）
+        for (const folder of incomingFolders) {
+          const sameName = existingByName.get(folder.name);
+          if (sameName) {
+            idMap.set(folder.id, sameName.id);
+            // 更新同名文件夹的基础信息（不改ID）
+            Object.assign(sameName, {
+              description: folder.description ?? sameName.description,
+              color: folder.color ?? sameName.color,
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            const newId = `folder_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            idMap.set(folder.id, newId);
+            foldersToCreate.push({ ...folder, id: newId });
+          }
+        }
+
+        // 创建不存在的文件夹，修正其父子关系（父ID按映射转换）
+        for (const folder of foldersToCreate) {
+          const created = {
+            id: folder.id,
+            name: folder.name,
+            description: folder.description ?? undefined,
+            color: folder.color ?? '#6366f1',
+            parentId: folder.parentId ? idMap.get(folder.parentId) : undefined,
+            createdAt: folder.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as PresetFolder;
+          this.presetFolders.push(created);
+        }
+
+        // 2) 导入扩展预设，修正其 folderId 指向到新ID
+        const incomingPresets: any[] = Array.isArray(data.extendedPresets) ? data.extendedPresets : [];
+        for (const preset of incomingPresets) {
+          // 如果已存在同名同类型，则更新；否则创建新预设
+          const existing = (this.extendedPresets || []).find((p) => p.name === preset.name && p.type === preset.type);
+          const mappedFolderId = preset.folderId ? idMap.get(preset.folderId) : undefined;
+
+          if (existing) {
+            Object.assign(existing, {
+              content: preset.content,
+              description: preset.description ?? existing.description,
+              tags: Array.isArray(preset.tags) ? preset.tags : existing.tags,
+              folderId: mappedFolderId ?? existing.folderId,
+              updatedAt: new Date().toISOString(),
+            });
+          } else {
+            this.extendedPresets.push({
+              id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              name: preset.name,
+              type: preset.type,
+              content: preset.content,
+              description: preset.description ?? undefined,
+              tags: Array.isArray(preset.tags) ? preset.tags : undefined,
+              folderId: mappedFolderId,
+              createdAt: preset.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            } as ExtendedPreset);
+          }
+        }
+
+        // 3) 合并预设管理配置（不覆盖现有设置），无需变更 defaultFolder
+        if (data.presetManagement) {
+          this.presetManagement = {
+            ...this.presetManagement,
+            folders: [...(this.presetManagement?.folders || []), ...(data.presetManagement.folders || [])],
+            presets: [...(this.presetManagement?.presets || []), ...(data.presetManagement.presets || [])],
+            settings: { ...(this.presetManagement?.settings || {}) },
+          };
+        }
+
+        // 4) 兼容旧预设格式（旧格式只含 presets: [{ name, text }...]）
+        if (Array.isArray(data.presets)) {
+          for (const oldPreset of data.presets) {
+            this.extendedPresets.push({
+              id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+              name: oldPreset.name,
+              type: 'positive' as PresetType,
+              content: oldPreset.text,
+              description: '从旧格式导入',
+              createdAt: oldPreset.updatedAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            } as ExtendedPreset);
+          }
+        }
+
+        this.save();
+        return true;
+      } catch (error) {
+        console.error('预设导入失败:', error);
+        return false;
+      }
     },
 
     // 兼容性：从旧预设迁移到新预设系统

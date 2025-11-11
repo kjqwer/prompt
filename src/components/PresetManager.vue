@@ -275,21 +275,22 @@ function formatDate(dateStr: string) {
 
 // 导入导出
 function exportPresets() {
-  const data = {
-    folders: store.presetFolders || [],
-    presets: store.extendedPresets || [],
-    exportedAt: new Date().toISOString()
-  };
-  
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `presets-${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-  
-  showNotification('预设已导出', 'success');
+  try {
+    const jsonData = store.exportPresetsToJson();
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `presets-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showNotification('预设已导出', 'success');
+  } catch (error) {
+    showNotification('导出失败', 'error');
+  }
 }
 
 function importPresets(event: Event) {
@@ -299,18 +300,22 @@ function importPresets(event: Event) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = JSON.parse(e.target?.result as string);
-      if (data.folders && data.presets) {
-        store.importExtendedPresets(data);
+      const jsonData = e.target?.result as string;
+      const success = store.importPresetsFromJson(jsonData);
+      
+      if (success) {
         showNotification('预设导入成功', 'success');
       } else {
-        showNotification('导入文件格式不正确', 'error');
+        showNotification('导入文件格式不正确或不是预设文件', 'error');
       }
     } catch (error) {
-      showNotification('导入失败，请检查文件格式', 'error');
+      showNotification('导入失败：文件格式错误', 'error');
     }
   };
   reader.readAsText(file);
+  
+  // 清空文件输入
+  (event.target as HTMLInputElement).value = '';
 }
 
 onMounted(() => {

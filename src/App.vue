@@ -68,16 +68,6 @@ function switchView(view: 'editor' | 'manager' | 'presets') {
           </button>
           <button 
             class="nav-btn" 
-            :class="{ active: currentView === 'manager' }"
-            @click="switchView('manager')"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 3h18v18H3zM9 9h6v6H9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>词库管理</span>
-          </button>
-          <button 
-            class="nav-btn" 
             :class="{ active: currentView === 'presets' }"
             @click="switchView('presets')"
           >
@@ -87,6 +77,16 @@ function switchView(view: 'editor' | 'manager' | 'presets') {
               <polyline points="7,3 7,8 15,8" stroke="currentColor" stroke-width="2"/>
             </svg>
             <span>预设管理</span>
+          </button>
+          <button 
+            class="nav-btn" 
+            :class="{ active: currentView === 'manager' }"
+            @click="switchView('manager')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 3h18v18H3zM9 9h6v6H9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>词库管理</span>
           </button>
         </nav>
 
