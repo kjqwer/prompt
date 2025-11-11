@@ -41,7 +41,6 @@ function handleClickOutside(event: Event) {
 }
 
 onMounted(() => {
-  store.initialize();
   document.addEventListener('click', handleClickOutside);
 });
 
@@ -75,7 +74,7 @@ watch(text, (val) => {
 // 当 store.promptText 发生变化（例如点击右侧预设加载）时，主动同步到左侧输入
 watch(() => store.promptText, (v) => {
   if (text.value !== v) text.value = v;
-});
+}, { immediate: true });
 
 function updateSuggestions() {
   const text = store.promptText;
@@ -405,7 +404,7 @@ function displayTrans(key: string): string {
 
     <main class="pe-main">
       <section class="pe-left-pane">
-        <div class="pe-section-title">左侧输入（逗号分隔）</div>
+        <div class="pe-section-title">提示词输入（逗号分隔）</div>
         <textarea ref="inputEl" class="pe-input" v-model="text" @keydown="onKeyDown" placeholder="例如：1girl, aaa, bbb, ccc"></textarea>
         <div class="pe-input-actions">
           <button @click="replaceCnComma" title="将中文逗号替换为英文逗号">
@@ -440,7 +439,7 @@ function displayTrans(key: string): string {
       </section>
       <section class="pe-right-pane">
         <div class="pe-section-title mode">
-          <span>右侧映射</span>
+          <span>提示词映射</span>
           <div class="pe-mode-switch">
             <button :class="{ active: viewMode==='compact' }" @click="viewMode='compact'">精简视图</button>
             <button :class="{ active: viewMode==='detail' }" @click="viewMode='detail'">详细视图</button>

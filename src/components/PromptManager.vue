@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { ref, computed } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { LangCode, PromptGroup, PromptTag } from '../types';
 
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
 const overIndex = ref<number | null>(null);
-
-onMounted(() => {
-  store.initialize();
-});
 
 const languages = computed(() => store.languages);
 const selectedLang = computed({

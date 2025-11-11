@@ -2,15 +2,19 @@
 import { ref, onMounted } from 'vue'
 import PromptEditor from './components/PromptEditor.vue'
 import PromptManager from './components/PromptManager.vue'
+import { usePromptStore } from './stores/promptStore'
 
 const currentView = ref<'editor' | 'manager'>('editor')
 const isDark = ref(false)
+const store = usePromptStore()
 
 onMounted(() => {
   // 检测系统主题偏好
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
   isDark.value = localStorage.getItem('theme') === 'dark' || (localStorage.getItem('theme') === null && prefersDark)
   updateTheme()
+  // 初始化词库与编辑器状态（仅一次）
+  store.initialize()
 })
 
 function toggleTheme() {
