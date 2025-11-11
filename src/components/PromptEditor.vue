@@ -57,6 +57,7 @@ const tokens = computed(() => store.tokens);
 
 const suggestions = ref<string[]>([]);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
+const editEl = ref<HTMLInputElement | null>(null);
 const text = ref('');
 
 watch(text, (val) => {
@@ -243,6 +244,12 @@ function beginEdit(i: number) {
   editingIndex.value = i;
   editingValue.value = tokens.value[i] ?? '';
   addingMapIndex.value = null;
+  nextTick(() => {
+    if (editEl.value) {
+      editEl.value.focus();
+      try { editEl.value.setSelectionRange(0, editingValue.value.length); } catch {}
+    }
+  });
 }
 function commitEdit() {
   if (editingIndex.value == null) return;
@@ -437,7 +444,7 @@ function displayTrans(key: string): string {
       
       <section class="pe-right-pane">
         <div class="pe-section-title mode">
-          <span>提示词映射</span>
+          <span>提示词映射（双击修改）</span>
           <div class="pe-mode-switch">
             <button :class="{ active: viewMode==='compact' }" @click="viewMode='compact'">精简视图</button>
             <button :class="{ active: viewMode==='detail' }" @click="viewMode='detail'">详细视图</button>
@@ -449,11 +456,12 @@ function displayTrans(key: string): string {
           <div
             v-for="(k,i) in tokens"
             :key="k + '_' + i"
-            :draggable="true"
+            :draggable="editingIndex !== i"
             :class="{ 
               'dragging': draggingIndex === i, 
               'drag-over': overIndex === i && draggingIndex !== i,
-              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i
+              'drag-placeholder': overIndex === i && draggingIndex !== null && draggingIndex !== i,
+              'editing': editingIndex === i
             }"
             class="pe-token-compact"
             @dragstart="onDragStart(i, $event)"
@@ -466,7 +474,30 @@ function displayTrans(key: string): string {
             :title="`${k} → ${displayTrans(k)}`"
           >
             <span class="pe-handle-compact">⋮⋮</span>
-            <div class="pe-token-content">
+            <div v-if="editingIndex === i" class="pe-edit-inline">
+              <input
+                ref="editEl"
+                class="pe-edit-input"
+                v-model="editingValue"
+                @keydown.enter.stop.prevent="commitEdit"
+                @keydown.esc.stop.prevent="cancelEdit"
+                placeholder="编辑提示词"
+              />
+              <div class="pe-edit-actions">
+                <button @click="commitEdit" class="pe-edit-save-btn" title="保存">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button @click="cancelEdit" class="pe-edit-cancel-btn" title="取消">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
+                    <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div v-else class="pe-token-content">
               <span class="pe-key-compact">{{ k }}</span>
               <span class="pe-arrow-compact">→</span>
               <span class="pe-trans-compact" :class="{ unmapped: displayTrans(k) === k }">
@@ -498,9 +529,9 @@ function displayTrans(key: string): string {
                   <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </button>
-              </div>
-              </div>
-              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="pe-tokens-detail" v-else>
           <div
@@ -1016,6 +1047,85 @@ function displayTrans(key: string): string {
 .pe-token-compact:hover {
   border-color: var(--color-border-hover);
   box-shadow: var(--shadow-sm);
+}
+
+/* 精简视图编辑态美化 */
+.pe-token-compact.editing {
+  cursor: default;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+  background-color: var(--color-bg-primary);
+}
+
+.pe-token-compact[draggable="false"] {
+  cursor: default;
+}
+
+.pe-token-compact.editing .pe-handle-compact,
+.pe-token-compact.editing .pe-token-content,
+.pe-token-compact.editing .pe-token-controls-compact {
+  display: none;
+}
+
+.pe-edit-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pe-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  transition: all 0.2s ease;
+}
+
+.pe-edit-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.pe-edit-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+  background-color: var(--color-bg-primary);
+}
+
+.pe-edit-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.pe-edit-save-btn, .pe-edit-cancel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pe-edit-save-btn:hover {
+  background-color: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.pe-edit-cancel-btn:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
 }
 
 .pe-token-compact.dragging {
