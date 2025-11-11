@@ -60,13 +60,40 @@ const filteredPresets = computed(() => {
     return true;
   });
   
-  // 搜索过滤
+  // 搜索过滤 - 支持名称、内容、描述、标签、文件夹搜索
   if (q) {
-    list = list.filter((p) => 
-      p.name.toLowerCase().includes(q) ||
-      p.text.toLowerCase().includes(q) ||
-      p.description?.toLowerCase().includes(q)
-    );
+    list = list.filter((p) => {
+      // 基本搜索：名称、内容、描述
+      const basicMatch = p.name.toLowerCase().includes(q) ||
+                        p.text.toLowerCase().includes(q) ||
+                        p.description?.toLowerCase().includes(q);
+      
+      // 标签搜索（如果是扩展预设）
+      let tagMatch = false;
+      if (p.isExtended) {
+        const extendedPreset = store.extendedPresets.find(ep => ep.name === p.name && ep.type === p.type);
+        if (extendedPreset?.tags) {
+          tagMatch = extendedPreset.tags.some(tag => tag.toLowerCase().includes(q));
+        }
+      }
+      
+      // 文件夹搜索（如果是扩展预设）
+      let folderMatch = false;
+      if (p.isExtended) {
+        const extendedPreset = store.extendedPresets.find(ep => ep.name === p.name && ep.type === p.type);
+        if (extendedPreset?.folderId) {
+          const folder = store.presetFolders.find(f => f.id === extendedPreset.folderId);
+          if (folder) {
+            folderMatch = folder.name.toLowerCase().includes(q);
+          }
+        }
+      }
+      
+      // 类型搜索
+      const typeMatch = getTypeLabel(p.type).toLowerCase().includes(q);
+      
+      return basicMatch || tagMatch || folderMatch || typeMatch;
+    });
   }
   
   // 排序
@@ -372,7 +399,7 @@ onUnmounted(() => {
             <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
             <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
           </svg>
-          <input v-model="presetSearch" placeholder="搜索预设..." />
+          <input v-model="presetSearch" placeholder="搜索预设名称、内容、标签、文件夹..." />
         </div>
         
         <div class="pd-sort-controls">
@@ -484,6 +511,7 @@ onUnmounted(() => {
       <div class="pd-footer">
         <div class="pd-tips">
           <span>💡 双击预设名称快速加载</span>
+          <span>🔍 支持搜索名称、内容、标签、文件夹</span>
           <span>⌨️ ESC 关闭面板</span>
         </div>
       </div>

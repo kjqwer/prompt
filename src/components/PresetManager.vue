@@ -70,10 +70,11 @@ const filteredPresets = computed(() => {
   // 按文件夹过滤
   if (selectedFolder.value) {
     presets = presets.filter(p => p.folderId === selectedFolder.value);
-  } else if (selectedFolder.value === null) {
+  } else if (selectedFolder.value === '') {
     // 显示未分类的预设
     presets = presets.filter(p => !p.folderId);
   }
+  // 如果 selectedFolder.value === null，则显示所有预设（不过滤）
   
   // 按搜索关键词过滤
   if (searchQuery.value.trim()) {
@@ -392,7 +393,8 @@ onMounted(() => {
         </select>
         
         <select v-model="selectedFolder" class="pm-folder-filter">
-          <option :value="null">未分类</option>
+          <option :value="null">所有预设</option>
+          <option value="">未分类</option>
           <option v-for="folder in folderTree" :key="folder.id" :value="folder.id">
             📁 {{ folder.name }} ({{ folder.presetCount }})
           </option>
