@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { PromptPreset } from '../types';
+import NotificationToast from './NotificationToast.vue';
 
 const store = usePromptStore();
 
@@ -27,6 +28,20 @@ const newPresetName = ref('');
 const showCreateForm = ref(false);
 const sortBy = ref<'name' | 'date'>('date');
 const sortOrder = ref<'asc' | 'desc'>('desc');
+
+// 通知状态与方法（复用现有提示框架）
+const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ 
+  message: '', 
+  type: 'info', 
+  show: false 
+});
+
+function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  notification.value = { message, type, show: true };
+  setTimeout(() => {
+    notification.value.show = false;
+  }, 3000);
+}
 
 // 计算属性
 const filteredPresets = computed(() => {
@@ -196,18 +211,30 @@ function cancelRename() {
   renamingValue.value = '';
 }
 
-function duplicatePreset(preset: any) {
-  const newName = `${preset.name} - 副本`;
+async function copyPresetToClipboard(preset: any) {
+  const text = preset?.text || '';
+  if (!text) return;
   
-  // 只复制到扩展预设系统
-  const defaultFolder = store.presetManagement?.settings?.defaultFolder;
-  store.createExtendedPreset({
-    name: newName,
-    type: preset.type || 'positive',
-    content: preset.text,
-    description: preset.description || '复制的预设',
-    folderId: defaultFolder
-  });
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotification('已复制到剪贴板', 'success');
+  } catch (err) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showNotification('已复制到剪贴板', 'success');
+    } catch (e) {
+      console.error('复制到剪贴板失败:', e);
+      showNotification('复制失败，请手动复制', 'error');
+    }
+  }
 }
 
 function exportPreset(preset: any) {
@@ -452,7 +479,7 @@ onUnmounted(() => {
             </div>
             
             <div class="pd-item-actions">
-              <button @click.stop="duplicatePreset(p)" class="pd-action-btn" title="复制">
+              <button @click.stop="copyPresetToClipboard(p)" class="pd-action-btn" title="复制到剪贴板">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
                   <path d="m5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
@@ -515,6 +542,13 @@ onUnmounted(() => {
           <span>⌨️ ESC 关闭面板</span>
         </div>
       </div>
+      
+      <!-- 通知组件 -->
+      <NotificationToast 
+        :message="notification.message"
+        :type="notification.type"
+        :show="notification.show"
+      />
     </div>
   </Transition>
 </template>
