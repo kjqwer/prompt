@@ -65,8 +65,16 @@ const selectedLang = computed({
 const tokens = computed(() => store.tokens);
 
 const suggestions = ref<string[]>([]);
+const editSuggestions = ref<string[]>([]);
 const inputEl = ref<HTMLTextAreaElement | null>(null);
-const editEl = ref<HTMLInputElement | null>(null);
+// 注意：ref 在 v-for 中可能成为数组，这里做统一归一化处理
+const editEl = ref<HTMLInputElement | HTMLInputElement[] | null>(null);
+
+function currentEditEl(): HTMLInputElement | null {
+  const raw = editEl.value as any;
+  if (!raw) return null;
+  return Array.isArray(raw) ? (raw[0] ?? null) : raw;
+}
 const text = ref('');
 
 watch(text, (val) => {
@@ -80,10 +88,52 @@ watch(() => store.promptText, (v) => {
 }, { immediate: true });
 
 function updateSuggestions() {
-  const text = store.promptText;
-  const last = text.split(',').pop() || '';
-  const p = last.trim();
-  suggestions.value = store.getSuggestions(p, 8);
+  const el = inputEl.value;
+  const txt = store.promptText;
+  let pos = txt.length;
+  if (el && typeof el.selectionStart === 'number') {
+    pos = el.selectionStart ?? txt.length;
+  }
+  // 计算当前光标所在片段：左右最近的逗号之间
+  const leftCommaEn = txt.lastIndexOf(',', pos - 1);
+  const leftCommaCn = txt.lastIndexOf('，', pos - 1);
+  const left = Math.max(leftCommaEn, leftCommaCn);
+  const rightCommaEn = txt.indexOf(',', pos);
+  const rightCommaCn = txt.indexOf('，', pos);
+  const rightCandidates = [rightCommaEn, rightCommaCn].filter(i => i !== -1);
+  const right = rightCandidates.length ? Math.min(...rightCandidates) : txt.length;
+  const segment = txt.slice(left < 0 ? 0 : left + 1, right).trim();
+  suggestions.value = store.getSuggestions(segment, 8);
+}
+
+function updateEditSuggestions() {
+  const el = currentEditEl();
+  const val = editingValue.value || '';
+  let pos = val.length;
+  if (el && typeof el.selectionStart === 'number') {
+    pos = el.selectionStart ?? val.length;
+  }
+  // 对编辑输入，使用光标左侧内容作为前缀
+  const before = val.slice(0, pos);
+  const match = before.match(/[^，,]*$/);
+  const prefix = (match ? match[0] : before).trim();
+  editSuggestions.value = store.getSuggestions(prefix, 8);
+}
+
+// 计算左侧输入（textarea）基于光标位置的片段替换范围（修剪前后空格）
+function getTextSegmentBounds(txt: string, pos: number) {
+  const leftCommaEn = txt.lastIndexOf(',', pos - 1);
+  const leftCommaCn = txt.lastIndexOf('，', pos - 1);
+  const left = Math.max(leftCommaEn, leftCommaCn);
+  const rightCommaEn = txt.indexOf(',', pos);
+  const rightCommaCn = txt.indexOf('，', pos);
+  const rightCandidates = [rightCommaEn, rightCommaCn].filter(i => i !== -1);
+  const right = rightCandidates.length ? Math.min(...rightCandidates) : txt.length;
+  let start = left < 0 ? 0 : left + 1;
+  let end = right;
+  while (start < end && txt[start] && /\s/.test(txt[start]!)) start++;
+  while (end > start && txt[end - 1] && /\s/.test(txt[end - 1]!)) end--;
+  return { start, end };
 }
 
 async function onKeyDown(e: KeyboardEvent) {
@@ -95,19 +145,17 @@ async function onKeyDown(e: KeyboardEvent) {
     const before = store.promptText.slice(0, pos);
     const match = before.match(/[^，,]*$/);
     const prefix = (match ? match[0] : '').trim();
-    const start = pos - (match ? match[0].length : 0);
+    const { start, end } = getTextSegmentBounds(store.promptText, pos);
     const list = store.getSuggestions(prefix, 8);
     if (list.length > 0) {
       e.preventDefault();
       const s = list[0];
       if (!s) return;
-      const after = store.promptText.slice(pos);
-      const nextText = store.promptText.slice(0, start) + s + after;
-      text.value = nextText;
+      // 通过 setRangeText 模拟用户输入，保留撤回/前进栈
+      el.setRangeText(s, start, end, 'end');
+      // 确保触发 v-model 同步
+      el.dispatchEvent(new Event('input', { bubbles: true }));
       await nextTick();
-      // 将光标移动到补全结尾
-      const newPos = start + s.length;
-      el.setSelectionRange(newPos, newPos);
       updateSuggestions();
     }
   }
@@ -267,9 +315,10 @@ function beginEdit(i: number) {
   editingValue.value = tokens.value[i] ?? '';
   addingMapIndex.value = null;
   nextTick(() => {
-    if (editEl.value) {
-      editEl.value.focus();
-      try { editEl.value.setSelectionRange(0, editingValue.value.length); } catch {}
+    const el = currentEditEl();
+    if (el) {
+      el.focus();
+      try { el.setSelectionRange(0, editingValue.value.length); } catch {}
     }
   });
 }
@@ -350,17 +399,46 @@ function handlePresetRename(oldName: string, newName: string) {
 async function applySuggestion(s: string) {
   const el = inputEl.value;
   if (!el) return;
+  // 确保输入框获得焦点，避免点击建议导致焦点丢失
+  el.focus();
   const pos = el.selectionStart ?? store.promptText.length;
-  const before = store.promptText.slice(0, pos);
-  const match = before.match(/[^，,]*$/);
-  const start = pos - (match ? match[0].length : 0);
-  const after = store.promptText.slice(pos);
-  const nextText = store.promptText.slice(0, start) + s + after;
-  text.value = nextText;
+  const { start, end } = getTextSegmentBounds(store.promptText, pos);
+  // 使用 setRangeText 替换整个片段以支持撤回
+  el.setRangeText(s, start, end, 'end');
+  el.dispatchEvent(new Event('input', { bubbles: true }));
   await nextTick();
-  const newPos = start + s.length;
-  el.setSelectionRange(newPos, newPos);
   updateSuggestions();
+}
+
+function onEditKeyDown(e: KeyboardEvent) {
+  if (e.key !== 'Tab') return;
+  const el = currentEditEl();
+  if (!el) return;
+  const val = editingValue.value || '';
+  const pos = el.selectionStart ?? val.length;
+  const before = val.slice(0, pos);
+  const match = before.match(/[^，,]*$/);
+  const prefix = (match ? match[0] : '').trim();
+  const list = store.getSuggestions(prefix, 8);
+  if (list.length > 0) {
+    e.preventDefault();
+    const s = list[0];
+    if (s) el.setRangeText(s, 0, val.length, 'end');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    updateEditSuggestions();
+  }
+}
+
+function applyEditSuggestion(s: string) {
+  const el = currentEditEl();
+  if (!el) return;
+  // 保持焦点在编辑输入上
+  el.focus();
+  const val = editingValue.value || '';
+  // 直接替换整个输入为建议
+  el.setRangeText(s, 0, val.length, 'end');
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  updateEditSuggestions();
 }
 
 function displayTrans(key: string): string {
@@ -431,7 +509,15 @@ function displayTrans(key: string): string {
     <main class="pe-main">
       <section class="pe-left-pane">
         <div class="pe-section-title">提示词输入（逗号分隔）</div>
-        <textarea ref="inputEl" class="pe-input" v-model="text" @keydown="onKeyDown" placeholder="例如：1girl, aaa, bbb, ccc"></textarea>
+        <textarea 
+          ref="inputEl" 
+          class="pe-input" 
+          v-model="text" 
+          @keydown="onKeyDown" 
+          @click="updateSuggestions" 
+          @keyup="updateSuggestions" 
+          placeholder="例如：1girl, aaa, bbb, ccc"
+        ></textarea>
         <div class="pe-input-actions">
           <button @click="replaceCnComma" title="将中文逗号替换为英文逗号">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -460,7 +546,12 @@ function displayTrans(key: string): string {
           </button>
         </div>
         <ul class="pe-suggest" v-if="suggestions.length">
-          <li v-for="s in suggestions" :key="s" @click="applySuggestion(s)">{{ s }}</li>
+          <li 
+            v-for="s in suggestions" 
+            :key="s" 
+            @mousedown.prevent 
+            @click="applySuggestion(s)"
+          >{{ s }}</li>
         </ul>
       </section>
       
@@ -496,10 +587,21 @@ function displayTrans(key: string): string {
                 ref="editEl"
                 class="pe-edit-input"
                 v-model="editingValue"
+                @keydown="onEditKeyDown"
                 @keydown.enter.stop.prevent="commitEdit"
                 @keydown.esc.stop.prevent="cancelEdit"
+                @click="updateEditSuggestions"
+                @keyup="updateEditSuggestions"
                 placeholder="编辑提示词"
               />
+              <ul class="pe-edit-suggest" v-if="editSuggestions.length">
+                <li 
+                  v-for="s in editSuggestions" 
+                  :key="'e_'+s" 
+                  @mousedown.prevent 
+                  @click="applyEditSuggestion(s)"
+                >{{ s }}</li>
+              </ul>
               <div class="pe-edit-actions">
                 <button @click="commitEdit" class="pe-edit-save-btn" title="保存">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -613,7 +715,23 @@ function displayTrans(key: string): string {
             </div>
             
             <div v-if="editingIndex === i" class="pe-edit-panel">
-              <input v-model="editingValue" @keyup.enter="commitEdit" placeholder="编辑词条..." />
+              <input 
+                ref="editEl" 
+                v-model="editingValue" 
+                @keydown="onEditKeyDown" 
+                @keyup.enter="commitEdit" 
+                @click="updateEditSuggestions" 
+                @keyup="updateEditSuggestions" 
+                placeholder="编辑词条..." 
+              />
+              <ul class="pe-edit-suggest" v-if="editSuggestions.length">
+                <li 
+                  v-for="s in editSuggestions" 
+                  :key="'p_'+s" 
+                  @mousedown.prevent 
+                  @click="applyEditSuggestion(s)"
+                >{{ s }}</li>
+              </ul>
               <div class="pe-edit-actions">
                 <button @click="commitEdit" class="pe-confirm-btn">确定</button>
                 <button @click="cancelEdit" class="pe-cancel-btn">取消</button>
@@ -1031,6 +1149,33 @@ function displayTrans(key: string): string {
   border-color: var(--color-accent);
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
+}
+
+/* 编辑输入建议列表（紧凑尺寸） */
+.pe-edit-suggest {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.pe-edit-suggest li {
+  padding: 0.25rem 0.5rem;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pe-edit-suggest li:hover {
+  background-color: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
 }
 
 /* 紧凑行视图 */
