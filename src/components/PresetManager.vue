@@ -105,6 +105,82 @@ const folderTree = computed(() => {
   return buildTree(rootFolders);
 });
 
+// 展开/折叠状态
+const expandedFolderIds = ref<Set<string>>(new Set());
+
+function toggleFolderExpand(id: string) {
+  const set = new Set(expandedFolderIds.value);
+  if (set.has(id)) set.delete(id); else set.add(id);
+  expandedFolderIds.value = set;
+}
+
+// 计算后代 ID，用于筛选与排除循环
+function getDescendantIds(folderId: string): string[] {
+  const all = store.presetFolders || [];
+  const result: string[] = [];
+  function walk(id: string) {
+    const children = all.filter(f => f.parentId === id);
+    for (const c of children) {
+      result.push(c.id);
+      walk(c.id);
+    }
+  }
+  walk(folderId);
+  return result;
+}
+
+// 扁平化文件夹用于选择（面包屑路径标签）
+const flattenedFolders = computed(() => {
+  type FlatItem = { id: string; name: string; label: string; level: number; presetCount: number; hasChildren: boolean };
+  const res: FlatItem[] = [];
+  function walk(nodes: any[], level: number, parentPath: string) {
+    nodes.forEach((node: any) => {
+      const label = parentPath ? `${parentPath} / ${node.name}` : node.name;
+      res.push({
+        id: node.id,
+        name: node.name,
+        label,
+        level,
+        presetCount: node.presetCount,
+        hasChildren: !!(node.children && node.children.length)
+      });
+      if (node.children && node.children.length) {
+        walk(node.children, level + 1, label);
+      }
+    });
+  }
+  walk(folderTree.value, 0, '');
+  return res;
+});
+
+// 父文件夹可选项（编辑时排除自身及其所有子孙）
+const flattenedParentOptions = computed(() => {
+  const exclude = new Set<string>();
+  if (editingFolder.value) {
+    exclude.add(editingFolder.value.id);
+    getDescendantIds(editingFolder.value.id).forEach(id => exclude.add(id));
+  }
+  return flattenedFolders.value.filter(f => !exclude.has(f.id));
+});
+
+// 可见的文件夹树列表（尊重展开状态）
+const visibleFolderList = computed(() => {
+  type VisibleItem = { node: any; level: number; hasChildren: boolean; expanded: boolean };
+  const res: VisibleItem[] = [];
+  function walk(nodes: any[], level: number) {
+    nodes.forEach((node: any) => {
+      const hasChildren = !!(node.children && node.children.length);
+      const expanded = expandedFolderIds.value.has(node.id);
+      res.push({ node, level, hasChildren, expanded });
+      if (hasChildren && expanded) {
+        walk(node.children, level + 1);
+      }
+    });
+  }
+  walk(folderTree.value, 0);
+  return res;
+});
+
 // 预设操作
 function createPreset() {
   resetPresetForm();
@@ -400,8 +476,8 @@ onMounted(() => {
         <select v-model="selectedFolder" class="pm-folder-filter">
           <option :value="null">所有预设</option>
           <option value="">未分类</option>
-          <option v-for="folder in folderTree" :key="folder.id" :value="folder.id">
-            📁 {{ folder.name }} ({{ folder.presetCount }})
+          <option v-for="f in flattenedFolders" :key="f.id" :value="f.id">
+            📁 {{ f.label }} ({{ f.presetCount }})
           </option>
         </select>
       </div>
@@ -503,23 +579,26 @@ onMounted(() => {
           </div>
         </div>
         
-        <div v-for="folder in folderTree" :key="folder.id" class="pm-folder-item">
-          <div class="pm-folder-header">
+        <div v-for="item in visibleFolderList" :key="item.node.id" class="pm-folder-item">
+          <div class="pm-folder-header" :style="{ paddingLeft: `${item.level * 16}px` }">
+            <button v-if="item.hasChildren" @click="toggleFolderExpand(item.node.id)" class="pm-expander" :title="item.expanded ? '折叠' : '展开'">
+              <span>{{ item.expanded ? '▼' : '▶' }}</span>
+            </button>
             <div class="pm-folder-info">
-              <div class="pm-folder-icon" :style="{ backgroundColor: folder.color }">📁</div>
+              <div class="pm-folder-icon" :style="{ backgroundColor: item.node.color }">📁</div>
               <div class="pm-folder-details">
-                <h4>{{ folder.name }}</h4>
-                <span class="pm-folder-meta">{{ folder.presetCount }} 个预设 · {{ formatDate(folder.updatedAt) }}</span>
+                <h4>{{ item.node.name }}</h4>
+                <span class="pm-folder-meta">{{ item.node.presetCount }} 个预设 · {{ formatDate(item.node.updatedAt) }}</span>
               </div>
             </div>
             <div class="pm-folder-actions">
-              <button @click="editFolder(folder)" class="pm-action-btn" title="编辑文件夹">
+              <button @click="editFolder(item.node)" class="pm-action-btn" title="编辑文件夹">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/>
                   <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </button>
-              <button @click="deleteFolder(folder)" class="pm-action-btn pm-delete" title="删除文件夹">
+              <button @click="deleteFolder(item.node)" class="pm-action-btn pm-delete" title="删除文件夹">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/>
                   <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
@@ -528,8 +607,8 @@ onMounted(() => {
             </div>
           </div>
           
-          <div v-if="folder.description" class="pm-folder-description">
-            {{ folder.description }}
+          <div v-if="item.node.description" class="pm-folder-description">
+            {{ item.node.description }}
           </div>
         </div>
       </div>
@@ -563,8 +642,8 @@ onMounted(() => {
               <label>所属文件夹</label>
               <select v-model="presetForm.folderId">
                 <option value="">未分类</option>
-                <option v-for="folder in folderTree" :key="folder.id" :value="folder.id">
-                  📁 {{ folder.name }}
+                <option v-for="f in flattenedFolders" :key="f.id" :value="f.id">
+                  📁 {{ f.label }}
                 </option>
               </select>
             </div>
@@ -617,8 +696,8 @@ onMounted(() => {
               <label>父文件夹</label>
               <select v-model="folderForm.parentId">
                 <option value="">根目录</option>
-                <option v-for="folder in folderTree" :key="folder.id" :value="folder.id">
-                  📁 {{ folder.name }}
+                <option v-for="f in flattenedParentOptions" :key="f.id" :value="f.id">
+                  📁 {{ f.label }}
                 </option>
               </select>
             </div>
@@ -999,6 +1078,24 @@ onMounted(() => {
   background-color: var(--color-error);
   color: white;
   border-color: var(--color-error);
+}
+
+/* 文件夹树展开按钮 */
+.pm-expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  margin-right: 0.25rem;
+}
+
+.pm-expander:hover {
+  color: var(--color-text-secondary);
 }
 
 .pm-preset-description, .pm-folder-description {
