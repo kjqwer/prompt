@@ -1,46 +1,49 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/dog.ico" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- 基本 SEO -->
-    <meta name="description" content="提示词编辑器：用于编辑、管理与翻译 AI 提示词（支持多语言映射、预设保存、文件夹分类、拖拽排序、智能补全、导入导出与本地持久化）。适用于 Stable Diffusion、Midjourney 等场景的提示词组织与复用。" />
-    <meta name="keywords" content="提示词编辑器, 提示词管理, 词库, 预设, 多语言, 翻译, 拖拽排序, 智能补全, 导入导出, 本地持久化, Stable Diffusion, Midjourney, AI绘图" />
-    <meta name="robots" content="index, follow" />
-    <meta name="googlebot" content="index, follow" />
-    <link rel="canonical" href="https://prompt.sywb.top/" />
-    <meta name="application-name" content="提示词编辑器" />
-    <meta name="author" content="kjqwer" />
-    <meta name="generator" content="Vite + Vue 3" />
-    <!-- 主题色（根据系统偏好） -->
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
-    <meta name="format-detection" content="telephone=no,email=no,address=no" />
 
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="提示词编辑器 · 词库与预设管理" />
-    <meta property="og:description" content="编辑、管理与翻译 AI 提示词，支持预设与文件夹管理、拖拽排序、智能补全、导入导出与本地持久化。" />
-    <meta property="og:url" content="https://prompt.sywb.top/" />
-    <meta property="og:site_name" content="提示词编辑器" />
-    <meta property="og:locale" content="zh_CN" />
-    <meta property="og:locale:alternate" content="en_US" />
-    <meta property="og:locale:alternate" content="es_ES" />
-    <meta property="og:image" content="https://prompt.sywb.top/preview.png" />
-    <meta property="og:image:alt" content="首页预览" />
-    <meta property="og:image" content="https://sywb.top/Staticfiles/preview.png" />
-    <meta property="og:image:alt" content="AI 绘图" />
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/dog.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- 基本 SEO -->
+  <meta name="description"
+    content="提示词编辑器：用于编辑、管理与翻译 AI 提示词（支持多语言映射、预设保存、文件夹分类、拖拽排序、智能补全、导入导出与本地持久化）。提示词工具：纯前端无需后端与额外配置，点击即用；支持自定义静态部署与本地持久化；适用于 Stable Diffusion、Midjourney 等场景的提示词组织与复用。" />
+  <meta name="keywords"
+    content="提示词编辑器,点击即用,静态部署, 提示词管理, 词库, 预设, 多语言, 翻译, 拖拽排序, 智能补全, 导入导出, 本地持久化, Stable Diffusion, Midjourney, AI绘图" />
+  <meta name="robots" content="index, follow" />
+  <meta name="googlebot" content="index, follow" />
+  <link rel="canonical" href="https://prompt.sywb.top/" />
+  <meta name="application-name" content="提示词编辑器" />
+  <meta name="author" content="kjqwer" />
+  <meta name="generator" content="Vite + Vue 3" />
+  <!-- 主题色（根据系统偏好） -->
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+  <meta name="format-detection" content="telephone=no,email=no,address=no" />
 
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="提示词编辑器 · 词库与预设管理" />
-    <meta name="twitter:description" content="编辑、管理与翻译 AI 提示词（多语言、预设、文件夹、拖拽、导入导出）。" />
-    <meta name="twitter:image" content="https://sywb.top/Staticfiles/preview.png" />
-    <meta name="twitter:image:alt" content="AI 绘图" />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="提示词编辑器 · 词库与预设管理" />
+  <meta property="og:description" content="编辑、管理与翻译 AI 提示词，支持预设与文件夹管理、拖拽排序、智能补全、导入导出与本地持久化。" />
+  <meta property="og:url" content="https://prompt.sywb.top/" />
+  <meta property="og:site_name" content="提示词编辑器" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:locale:alternate" content="es_ES" />
+  <meta property="og:image" content="https://prompt.sywb.top/preview.png" />
+  <meta property="og:image:alt" content="首页预览" />
+  <meta property="og:image" content="https://sywb.top/Staticfiles/preview.png" />
+  <meta property="og:image:alt" content="AI 绘图" />
 
-    <!-- 结构化数据（WebApplication） -->
-    <script type="application/ld+json">
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="提示词编辑器 · 词库与预设管理" />
+  <meta name="twitter:description" content="编辑、管理与翻译 AI 提示词（多语言、预设、文件夹、拖拽、导入导出）。" />
+  <meta name="twitter:image" content="https://sywb.top/Staticfiles/preview.png" />
+  <meta name="twitter:image:alt" content="AI 绘图" />
+
+  <!-- 结构化数据（WebApplication） -->
+  <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebApplication",
@@ -74,8 +77,8 @@
     }
     </script>
 
-    <!-- 结构化数据（WebPage，用于声明主图） -->
-    <script type="application/ld+json">
+  <!-- 结构化数据（WebPage，用于声明主图） -->
+  <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -93,8 +96,8 @@
     }
     </script>
 
-    <!-- 结构化数据（FAQ） -->
-    <script type="application/ld+json">
+  <!-- 结构化数据（FAQ） -->
+  <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "FAQPage",
@@ -126,10 +129,12 @@
       ]
     }
     </script>
-    <title>提示词编辑器</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+  <title>提示词编辑器</title>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
 </html>
