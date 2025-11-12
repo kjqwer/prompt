@@ -1,9 +1,131 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/dog.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 基本 SEO -->
+    <meta name="description" content="提示词编辑器：用于编辑、管理与翻译 AI 提示词（支持多语言映射、预设保存、文件夹分类、拖拽排序、智能补全、导入导出与本地持久化）。适用于 Stable Diffusion、Midjourney 等场景的提示词组织与复用。" />
+    <meta name="keywords" content="提示词编辑器, 提示词管理, 词库, 预设, 多语言, 翻译, 拖拽排序, 智能补全, 导入导出, 本地持久化, Stable Diffusion, Midjourney, AI绘图" />
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow" />
+    <link rel="canonical" href="https://prompt.sywb.top/" />
+    <meta name="application-name" content="提示词编辑器" />
+    <meta name="author" content="kjqwer" />
+    <meta name="generator" content="Vite + Vue 3" />
+    <!-- 主题色（根据系统偏好） -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+    <meta name="format-detection" content="telephone=no,email=no,address=no" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="提示词编辑器 · 词库与预设管理" />
+    <meta property="og:description" content="编辑、管理与翻译 AI 提示词，支持预设与文件夹管理、拖拽排序、智能补全、导入导出与本地持久化。" />
+    <meta property="og:url" content="https://prompt.sywb.top/" />
+    <meta property="og:site_name" content="提示词编辑器" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:locale:alternate" content="es_ES" />
+    <meta property="og:image" content="https://prompt.sywb.top/preview.png" />
+    <meta property="og:image:alt" content="首页预览" />
+    <meta property="og:image" content="https://sywb.top/Staticfiles/preview.png" />
+    <meta property="og:image:alt" content="AI 绘图" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="提示词编辑器 · 词库与预设管理" />
+    <meta name="twitter:description" content="编辑、管理与翻译 AI 提示词（多语言、预设、文件夹、拖拽、导入导出）。" />
+    <meta name="twitter:image" content="https://sywb.top/Staticfiles/preview.png" />
+    <meta name="twitter:image:alt" content="AI 绘图" />
+
+    <!-- 结构化数据（WebApplication） -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "提示词编辑器",
+      "url": "https://prompt.sywb.top/",
+      "applicationCategory": "Productivity",
+      "operatingSystem": "Web",
+      "inLanguage": ["zh-CN", "en", "es-ES"],
+      "description": "用于编辑、管理与翻译 AI 提示词的轻量工具，支持多语言映射、预设保存与搜索、文件夹分类与拖拽排序、智能补全、导入导出与浏览器本地持久化。",
+      "image": {
+        "@type": "ImageObject",
+        "url": "https://sywb.top/Staticfiles/preview.png",
+        "caption": "AI 绘图"
+      },
+      "screenshot": {
+        "@type": "ImageObject",
+        "url": "https://prompt.sywb.top/preview.png",
+        "caption": "首页预览"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY",
+        "availability": "https://schema.org/InStock"
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "kjqwer",
+        "url": "https://github.com/kjqwer/prompt"
+      }
+    }
+    </script>
+
+    <!-- 结构化数据（WebPage，用于声明主图） -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "首页",
+      "url": "https://prompt.sywb.top/",
+      "primaryImageOfPage": {
+        "@type": "ImageObject",
+        "url": "https://sywb.top/Staticfiles/preview.png",
+        "caption": "AI 绘图"
+      },
+      "image": [
+        "https://sywb.top/Staticfiles/preview.png",
+        "https://prompt.sywb.top/preview.png"
+      ]
+    }
+    </script>
+
+    <!-- 结构化数据（FAQ） -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "如何保存并管理提示词预设？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "支持扩展预设类型（positive/negative/setting/style/character/scene/custom），可按文件夹分类、搜索、重命名、复制、删除，并一键应用到编辑器。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "是否支持导入导出与版本兼容？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "支持导出/导入词库与预设 JSON，本地自动备份（localStorage），并可自动迁移旧预设格式以保持兼容。"
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "是否支持多语言与翻译映射？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "内置默认数据并可加载 zh_CN 与 es_ES 的 YAML 译文，右侧映射面板支持未映射项高亮与直接添加翻译。"
+          }
+        }
+      ]
+    }
+    </script>
     <title>提示词编辑器</title>
   </head>
   <body>
