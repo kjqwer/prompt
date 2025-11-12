@@ -3,10 +3,13 @@ import { ref, onMounted } from 'vue'
 import PromptEditor from './components/PromptEditor.vue'
 import PromptManager from './components/PromptManager.vue'
 import PresetManager from './components/PresetManager.vue'
+import BackgroundCanvas from './components/BackgroundCanvas.vue'
+import DevtoolsBanner from './components/DevtoolsBanner.vue'
 import { usePromptStore } from './stores/promptStore'
 
 const currentView = ref<'editor' | 'manager' | 'presets'>('editor')
 const isDark = ref(false)
+const showBackground = ref(true)
 const store = usePromptStore()
 
 onMounted(() => {
@@ -16,6 +19,8 @@ onMounted(() => {
   updateTheme()
   // 初始化词库与编辑器状态（仅一次）
   store.initialize()
+  const bg = localStorage.getItem('bg.enabled')
+  showBackground.value = bg === null ? true : bg === 'on'
 })
 
 function toggleTheme() {
@@ -31,13 +36,20 @@ function updateTheme() {
 function switchView(view: 'editor' | 'manager' | 'presets') {
   currentView.value = view
 }
+
+function toggleBackground() {
+  showBackground.value = !showBackground.value
+  localStorage.setItem('bg.enabled', showBackground.value ? 'on' : 'off')
+}
 </script>
 
 <template>
   <div class="app-container" :class="{ dark: isDark }">
+    <BackgroundCanvas v-if="showBackground" />
+    <DevtoolsBanner />
     <!-- 顶部导航栏 -->
     <header class="app-header">
-      <div class="header-content">
+      <div class="header-content">  
         <div class="header-left">
           <a
             class="app-logo"
@@ -98,6 +110,18 @@ function switchView(view: 'editor' | 'manager' | 'presets') {
             </svg>
             <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="bg-toggle" :class="{ active: showBackground }" @click="toggleBackground" title="背景开关">
+            <svg v-if="showBackground" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="6" cy="12" r="1.5" fill="currentColor"/>
+              <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
+              <circle cx="18" cy="13" r="1.5" fill="currentColor"/>
+              <path d="M4 16c4-2 8-2 12 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 5l14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2"/>
             </svg>
           </button>
         </div>
@@ -275,6 +299,30 @@ body {
 .theme-toggle:hover {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-primary);
+}
+
+.bg-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bg-toggle:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.bg-toggle.active {
+  background-color: var(--color-accent);
+  color: white;
 }
 
 /* 主要内容区域 */

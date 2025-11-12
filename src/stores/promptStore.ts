@@ -97,6 +97,7 @@ export const usePromptStore = defineStore('promptStore', {
         }
       } else {
         this.dataset = deepClone(baseline!);
+        this.promptText = '1girl, solo, long hair, blue eyes, smile, looking_at_viewer, upper_body, outdoors, sunset';
       }
       // 若无恢复语言，则按数据集进行推断
       if (!this.selectedLang) {
