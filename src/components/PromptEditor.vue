@@ -136,6 +136,35 @@ function getTextSegmentBounds(txt: string, pos: number) {
   return { start, end };
 }
 
+// 统一的文本替换方法：优先使用原生插入以保留撤回栈，失败时回退
+function applyTextReplacement(
+  el: HTMLTextAreaElement | HTMLInputElement,
+  start: number,
+  end: number,
+  text: string,
+) {
+  try {
+    if (typeof el.setSelectionRange === 'function') {
+      el.setSelectionRange(start, end);
+    }
+    const ok = (document as any).execCommand && (document as any).execCommand('insertText', false, text);
+    if (ok) return;
+  } catch {}
+  try {
+    el.setRangeText(text, start, end, 'end');
+    try {
+      const ie = new (window as any).InputEvent('input', { bubbles: true, data: text, inputType: 'insertReplacementText' });
+      el.dispatchEvent(ie);
+    } catch {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  } catch {
+    const value = (el as any).value as string;
+    (el as any).value = value.slice(0, start) + text + value.slice(end);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
 async function onKeyDown(e: KeyboardEvent) {
   if (e.key === 'Tab') {
     // 在光标位置进行补全，不影响撤回
@@ -145,20 +174,18 @@ async function onKeyDown(e: KeyboardEvent) {
     const before = store.promptText.slice(0, pos);
     const match = before.match(/[^，,]*$/);
     const prefix = (match ? match[0] : '').trim();
-    const { start, end } = getTextSegmentBounds(store.promptText, pos);
-    const list = store.getSuggestions(prefix, 8);
-    if (list.length > 0) {
-      e.preventDefault();
-      const s = list[0];
-      if (!s) return;
-      // 通过 setRangeText 模拟用户输入，保留撤回/前进栈
-      el.setRangeText(s, start, end, 'end');
-      // 确保触发 v-model 同步
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      await nextTick();
-      updateSuggestions();
-    }
+  const { start, end } = getTextSegmentBounds(store.promptText, pos);
+  const list = store.getSuggestions(prefix, 8);
+  if (list.length > 0) {
+    e.preventDefault();
+    const s = list[0];
+    if (!s) return;
+    // 使用原生插入或回退方案，确保撤回可用
+    applyTextReplacement(el, start, end, s);
+    await nextTick();
+    updateSuggestions();
   }
+}
 }
 
 async function copyLeft() { 
@@ -403,9 +430,8 @@ async function applySuggestion(s: string) {
   el.focus();
   const pos = el.selectionStart ?? store.promptText.length;
   const { start, end } = getTextSegmentBounds(store.promptText, pos);
-  // 使用 setRangeText 替换整个片段以支持撤回
-  el.setRangeText(s, start, end, 'end');
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  // 使用原生插入或回退方式替换片段，确保撤回可用
+  applyTextReplacement(el, start, end, s);
   await nextTick();
   updateSuggestions();
 }
@@ -423,8 +449,7 @@ function onEditKeyDown(e: KeyboardEvent) {
   if (list.length > 0) {
     e.preventDefault();
     const s = list[0];
-    if (s) el.setRangeText(s, 0, val.length, 'end');
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+    if (s) applyTextReplacement(el, 0, val.length, s);
     updateEditSuggestions();
   }
 }
@@ -435,9 +460,8 @@ function applyEditSuggestion(s: string) {
   // 保持焦点在编辑输入上
   el.focus();
   const val = editingValue.value || '';
-  // 直接替换整个输入为建议
-  el.setRangeText(s, 0, val.length, 'end');
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  // 直接替换整个输入为建议，保证撤回可用
+  applyTextReplacement(el, 0, val.length, s);
   updateEditSuggestions();
 }
 
