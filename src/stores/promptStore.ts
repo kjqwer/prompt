@@ -202,7 +202,8 @@ export const usePromptStore = defineStore('promptStore', {
     addTag(groupId: string, key = 'new_tag') {
       const grp = this.findGroupById(groupId);
       if (!grp) return;
-      grp.tags.push({ key, translation: { en: key, [this.selectedLang]: key } });
+      // 新增提示词插入到列表顶部，便于用户立即编辑
+      grp.tags.unshift({ key, translation: { en: key, [this.selectedLang]: key } });
     },
     removeTag(groupId: string, key: string) {
       const grp = this.findGroupById(groupId);
