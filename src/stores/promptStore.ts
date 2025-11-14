@@ -99,10 +99,9 @@ export const usePromptStore = defineStore('promptStore', {
         this.dataset = deepClone(baseline!);
         this.promptText = '1girl, solo, long hair, blue eyes, smile, looking_at_viewer, upper_body, outdoors, sunset';
       }
-      // 若无恢复语言，则按数据集进行推断
+      // 若无恢复语言，则默认使用 zh_CN
       if (!this.selectedLang) {
-        const guessLang: LangCode = (this.dataset.languages.includes('zh_CN') ? 'zh_CN' : 'en') as LangCode;
-        this.selectedLang = guessLang;
+        this.selectedLang = 'zh_CN' as LangCode;
       }
       // 初始化扩展预设管理
       this.initializeExtendedPresets();

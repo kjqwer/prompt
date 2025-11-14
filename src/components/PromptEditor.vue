@@ -75,6 +75,53 @@ function currentEditEl(): HTMLInputElement | null {
   if (!raw) return null;
   return Array.isArray(raw) ? (raw[0] ?? null) : raw;
 }
+const priorityStyle = ref<'{}' | '()' | '[]' | '<>' | 'suffix'>('{}');
+const priorityStep = ref(1);
+function splitTokensLocal(txt: string): string[] {
+  return txt.split(/[，,]/).map(s => s.trim()).filter(s => s.length > 0);
+}
+function normalizeToken(t: string): string { return t.trim(); }
+function normalizePromptLocal(txt: string): string { return splitTokensLocal(txt).join(', '); }
+function applyFullPrompt(newText: string) {
+  const el = inputEl.value;
+  if (!el) { text.value = newText; return; }
+  el.focus();
+  applyTextReplacement(el, 0, text.value.length, newText);
+}
+function getTokenWeight(token: string): number {
+  const { core } = store.parseTokenWrappers(token);
+  const idx = core.lastIndexOf(':');
+  if (idx > -1) {
+    const w = parseFloat(core.slice(idx + 1).trim());
+    return isNaN(w) ? 1 : w;
+  }
+  return 1;
+}
+function hasWeightSuffix(token: string): boolean {
+  const { core } = store.parseTokenWrappers(token);
+  return /:\s*\d+(?:\.\d+)?$/.test(core);
+}
+function roundToDecimals(v: number, decimals: number): number {
+  const m = Math.pow(10, decimals);
+  return Math.round(v * m) / m;
+}
+function adjustWeight(core: string, delta: number): string {
+  const idx = core.lastIndexOf(':');
+  let base = core;
+  let w: number | null = null;
+  if (idx > -1) {
+    const num = parseFloat(core.slice(idx + 1).trim());
+    if (!isNaN(num)) { base = core.slice(0, idx); w = num; }
+  }
+  const stepStr = String(priorityStep.value);
+  const decimals = stepStr.includes('.') ? stepStr.split('.')[1]!.length : 0;
+  const cur = w == null ? 1.0 : w;
+  let nw = cur + delta;
+  if (delta < 0 && nw <= 1.0) return base;
+  nw = Math.min(2.0, Math.max(0.1, nw));
+  nw = roundToDecimals(nw, decimals);
+  return base + ':' + nw;
+}
 const text = ref('');
 
 watch(text, (val) => {
@@ -196,26 +243,60 @@ async function copyLeft() {
     showNotification('复制失败，请手动复制', 'error');
   }
 }
-function replaceCnComma() { store.replaceChineseComma(); text.value = store.promptText; }
-function formatPrompt() { store.formatPrompt(); text.value = store.promptText; }
+function replaceCnComma() { applyFullPrompt(text.value.replace(/，/g, ',')); }
+function formatPrompt() { applyFullPrompt(normalizePromptLocal(text.value)); }
 
 // 新增功能方法
 function toggleUnderscoreSpace() { 
-  store.toggleUnderscoreSpace(); 
-  text.value = store.promptText; 
+  const tokens = splitTokensLocal(text.value);
+  const newTokens = tokens.map(token => {
+    const { core, wrappers } = store.parseTokenWrappers(token);
+    let newCore;
+    if (core.includes('_')) {
+      newCore = core.replace(/_/g, ' ');
+    } else if (core.includes(' ')) {
+      newCore = core.replace(/ /g, '_');
+    } else {
+      newCore = core;
+    }
+    return store.wrapToken(newCore, wrappers);
+  });
+  applyFullPrompt(newTokens.join(', ')); 
   showNotification('已切换下划线/空格格式', 'success');
 }
 
 function addWrapperToToken(index: number) { 
-  store.addWrapperToToken(index, '{}'); 
-  text.value = store.promptText; 
-  showNotification('已添加包裹层 {}', 'success');
+  const tokens = splitTokensLocal(text.value); 
+  if (index < 0 || index >= tokens.length) return;
+  const token = tokens[index]!;
+  const parsed = store.parseTokenWrappers(token);
+  const core = parsed?.core ?? token;
+  const wrappers = parsed?.wrappers ?? [];
+  if (priorityStyle.value === 'suffix') {
+    const newCore = adjustWeight(core, +priorityStep.value);
+    tokens[index] = store.wrapToken(newCore, wrappers);
+  } else {
+    const newWrappers = [...wrappers, priorityStyle.value];
+    tokens[index] = store.wrapToken(core, newWrappers);
+  }
+  applyFullPrompt(tokens.join(', ')); 
+  showNotification('已添加优先级', 'success');
 }
 
 function removeWrapperFromToken(index: number) { 
-  store.removeWrapperFromToken(index); 
-  text.value = store.promptText; 
-  showNotification('已移除外层包裹', 'success');
+  const tokens = splitTokensLocal(text.value); 
+  if (index < 0 || index >= tokens.length) return;
+  const token = tokens[index]!;
+  const { core, wrappers } = store.parseTokenWrappers(token);
+  if (priorityStyle.value === 'suffix') {
+    const newCore = adjustWeight(core, -priorityStep.value);
+    tokens[index] = store.wrapToken(newCore, wrappers);
+  } else if (wrappers.length > 0) {
+    const newWrappers = wrappers.slice(0, -1);
+    tokens[index] = store.wrapToken(core, newWrappers);
+  }
+  applyFullPrompt(tokens.join(', ')); 
+  showNotification('已调整优先级', 'success');
 }
 
 function getTokenWrapperInfo(token: string) {
@@ -271,9 +352,12 @@ function handlePointerUp(e: PointerEvent) {
     } else {
       to = j + (from > j ? 1 : 0);
     }
+    const list = splitTokensLocal(text.value);
     if (to < 0) to = 0;
-    if (to >= tokens.value.length) to = tokens.value.length - 1;
-    store.reorderTokens(from, to);
+    if (to >= list.length) to = list.length - 1;
+    const [item] = list.splice(from, 1);
+    if (item != null) list.splice(to, 0, item);
+    applyFullPrompt(list.join(', '));
     showNotification('已重新排序', 'success');
   }
   cleanupDrag();
@@ -351,7 +435,12 @@ function beginEdit(i: number) {
 }
 function commitEdit() {
   if (editingIndex.value == null) return;
-  store.updateToken(editingIndex.value, editingValue.value);
+  const tokens = splitTokensLocal(text.value);
+  const i = editingIndex.value!;
+  if (i >= 0 && i < tokens.length) {
+    tokens[i] = normalizeToken(editingValue.value);
+    applyFullPrompt(tokens.join(', '));
+  }
   editingIndex.value = null;
 }
 function cancelEdit() { editingIndex.value = null; }
@@ -368,8 +457,17 @@ function commitAddMap() {
   addingMapIndex.value = null; addingMapValue.value = '';
 }
 
-function removeToken(i: number) { store.removeToken(i); }
-function addTokenAfter(i: number) { store.addTokenAfter(i, 'new_token'); }
+function removeToken(i: number) {
+  const tokens = splitTokensLocal(text.value);
+  if (i < 0 || i >= tokens.length) return;
+  tokens.splice(i, 1);
+  applyFullPrompt(tokens.join(', '));
+}
+function addTokenAfter(i: number) {
+  const tokens = splitTokensLocal(text.value);
+  tokens.splice(i + 1, 0, normalizeToken('new_token'));
+  applyFullPrompt(tokens.join(', '));
+}
 
 function savePreset() {
   if (!presetName.value.trim()) { 
@@ -466,7 +564,18 @@ function applyEditSuggestion(s: string) {
 }
 
 function displayTrans(key: string): string {
-  return store.getTranslation(key, selectedLang.value) ?? key;
+  const { core, wrappers } = store.parseTokenWrappers(key);
+  const m = core.match(/:(\d+(?:\.\d+)?)$/);
+  const base = m ? core.slice(0, core.lastIndexOf(':')) : core;
+  const suffix = m ? ':' + m[1]! : '';
+  const tag = store.getTagByKey(base);
+  const translatedCore = tag?.translation?.[selectedLang.value] ?? tag?.key ?? base;
+  return store.wrapToken(translatedCore + suffix, wrappers);
+}
+
+function isRemoveDisabled(token: string): boolean {
+  const info = getTokenWrapperInfo(token);
+  return info.wrapperCount === 0 && !hasWeightSuffix(token);
 }
 </script>
 
@@ -568,6 +677,26 @@ function displayTrans(key: string): string {
             </svg>
             切换 _/空格
           </button>
+          <div class="pe-priority-group">
+            <label class="pe-priority-label">优先级样式</label>
+            <select class="pe-priority-select" v-model="priorityStyle" title="选择新增优先级的样式">
+              <option value="{}">{}</option>
+              <option value="()">()</option>
+              <option value="[]">[]</option>
+              <option value="<>">&lt;&gt;</option>
+              <option value="suffix">后缀数字</option>
+            </select>
+            <label class="pe-priority-label">后缀数字间隔</label>
+            <input 
+              type="number" 
+              class="pe-priority-step" 
+              v-model.number="priorityStep" 
+              title="设置增减间隔" 
+              min="0.01" 
+              step="0.01" 
+              placeholder="1" 
+            />
+          </div>
         </div>
         <ul class="pe-suggest" v-if="suggestions.length">
           <li 
@@ -648,7 +777,7 @@ function displayTrans(key: string): string {
               </span>
             </div>
             <div class="pe-token-controls-compact">
-              <button @click="addWrapperToToken(i)" class="pe-add-wrapper-btn" title="添加包裹层 {}">
+              <button @click="addWrapperToToken(i)" class="pe-add-wrapper-btn" :title="`添加优先级（样式：${priorityStyle}）`">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
                   <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="2"/>
@@ -658,8 +787,8 @@ function displayTrans(key: string): string {
               <button 
                 @click="removeWrapperFromToken(i)" 
                 class="pe-remove-wrapper-btn" 
-                title="移除包裹层"
-                :disabled="getTokenWrapperInfo(k).wrapperCount === 0"
+                title="移除优先级"
+                :disabled="isRemoveDisabled(k)"
               >
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
@@ -704,7 +833,7 @@ function displayTrans(key: string): string {
                     <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>
                   </svg>
                 </button>
-                <button @click="addWrapperToToken(i)" class="pe-add-wrapper-detail-btn" title="添加包裹层 {}">
+                <button @click="addWrapperToToken(i)" class="pe-add-wrapper-detail-btn" :title="`添加优先级（样式：${priorityStyle}）`">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
                     <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" stroke-width="2"/>
@@ -714,8 +843,8 @@ function displayTrans(key: string): string {
                 <button 
                   @click="removeWrapperFromToken(i)" 
                   class="pe-remove-wrapper-detail-btn" 
-                  title="移除包裹层"
-                  :disabled="getTokenWrapperInfo(k).wrapperCount === 0"
+                  title="移除优先级"
+                  :disabled="isRemoveDisabled(k)"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M16 3h3v3M8 3H5v3m0 12v3h3m8 0h3v-3" stroke="currentColor" stroke-width="2" fill="none"/>
@@ -1145,6 +1274,40 @@ function displayTrans(key: string): string {
 .pe-input-actions button:hover {
   background-color: var(--color-bg-secondary);
   border-color: var(--color-border-hover);
+}
+
+.pe-priority-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pe-priority-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.pe-priority-select, .pe-priority-step {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pe-priority-select:hover, .pe-priority-step:hover {
+  border-color: var(--color-border-hover);
+}
+
+.pe-priority-select:focus, .pe-priority-step:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
 }
 
 .pe-suggest {
