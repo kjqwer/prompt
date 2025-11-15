@@ -536,7 +536,8 @@ export const usePromptStore = defineStore('promptStore', {
               } else {
                 let changed = false;
                 const change: { key: string; translation?: Partial<Record<LangCode, string>>; hidden?: boolean } = { key };
-                for (const l of ['en', 'zh_CN', 'es_ES'] as LangCode[]) {
+                const langs = Array.from(new Set([...(base.languages || []), ...(cur.languages || [])]));
+                for (const l of langs as LangCode[]) {
                   const a = baseTag.translation?.[l] ?? '';
                   const b = curTag.translation?.[l] ?? '';
                   if (a !== b) {

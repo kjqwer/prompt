@@ -92,15 +92,5 @@ export async function loadInitialDataset(): Promise<PromptDataset> {
     console.warn('zh_CN.yaml not found or invalid', err);
   }
 
-  try {
-    const esRoot = await fetchYaml('/sd/es_ES.yaml');
-    const esMap = collectTranslations(esRoot);
-    mergeLanguage(dataset, esMap, 'es_ES');
-    if (!dataset.languages.includes('es_ES')) dataset.languages.push('es_ES');
-  } catch (err) {
-    // ignore if missing
-    console.warn('es_ES.yaml not found or invalid', err);
-  }
-
   return dataset;
 }
