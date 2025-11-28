@@ -1,4 +1,4 @@
-export type LangCode = 'en' | 'zh_CN' | 'es_ES';
+export type LangCode = 'en' | 'zh_CN';
 
 export interface PromptTag {
   key: string;

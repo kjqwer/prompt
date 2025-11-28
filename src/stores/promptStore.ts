@@ -72,9 +72,25 @@ export const usePromptStore = defineStore('promptStore', {
         try {
           const bundle = JSON.parse(raw) as ExportBundle;
           if (bundle.dataset) {
-            this.dataset = bundle.dataset;
+            const diff = this.buildSnapshotDiff(deepClone(baseline!), bundle.dataset);
+            this.dataset = this.applyDiff(deepClone(baseline!), diff);
+            const newBundle: ExportBundle = {
+              version: 1,
+              savedAt: new Date().toISOString(),
+              customDiff: diff,
+              presets: bundle.presets || [],
+              extendedPresets: bundle.extendedPresets || [],
+              presetFolders: bundle.presetFolders || [],
+              presetManagement: bundle.presetManagement,
+              promptText: bundle.promptText,
+              selectedLang: bundle.selectedLang,
+            };
+            localStorage.setItem(LS_KEY, JSON.stringify(newBundle));
           } else if (bundle.customDiff) {
-            this.dataset = this.applyDiff(deepClone(baseline!), bundle.customDiff);
+            const purified = this.sanitizeDiff(bundle.customDiff);
+            this.dataset = this.applyDiff(deepClone(baseline!), purified);
+            const newBundle: ExportBundle = { ...bundle, customDiff: purified, savedAt: new Date().toISOString() };
+            localStorage.setItem(LS_KEY, JSON.stringify(newBundle));
           } else {
             this.dataset = deepClone(baseline!);
           }
@@ -120,12 +136,12 @@ export const usePromptStore = defineStore('promptStore', {
     },
     save() {
       if (!this.dataset) return;
+      const diff = baseline ? this.buildDiff(baseline, this.dataset) : { categories: [] };
       const bundle: ExportBundle = {
         version: 1,
         savedAt: new Date().toISOString(),
-        dataset: deepClone(this.dataset),
+        customDiff: diff,
         presets: deepClone(this.presets),
-        // 扩展预设数据
         extendedPresets: deepClone(this.extendedPresets),
         presetFolders: deepClone(this.presetFolders),
         presetManagement: deepClone(this.presetManagement),
@@ -198,6 +214,34 @@ export const usePromptStore = defineStore('promptStore', {
     },
     setSearch(q: string) {
       this.searchQuery = q;
+      const query = q.trim().toLowerCase();
+      if (!query || !this.dataset) return;
+      const norm = (s: string) => s.toLowerCase().replace(/_/g, ' ');
+      for (let ci = 0; ci < this.dataset.categories.length; ci++) {
+        const cat = this.dataset.categories[ci];
+        if (!cat) continue;
+        for (let gi = 0; gi < cat.groups.length; gi++) {
+          const grp = cat.groups[gi];
+          if (!grp) continue;
+          for (const t of grp.tags) {
+            const keyLower = t.key.toLowerCase();
+            const keyNorm = norm(t.key);
+            const trans = t.translation?.[this.selectedLang] ?? '';
+            const transLower = trans.toLowerCase();
+            const transNorm = norm(trans);
+            if (
+              keyLower.includes(query) ||
+              keyNorm.includes(query.replace(/_/g, ' ')) ||
+              transLower.includes(query) ||
+              transNorm.includes(query.replace(/_/g, ' '))
+            ) {
+              this.selectedCategoryIndex = ci;
+              this.selectedGroupIndex = gi;
+              return;
+            }
+          }
+        }
+      }
     },
     addTag(groupId: string, key = 'new_tag') {
       const grp = this.findGroupById(groupId);
@@ -536,7 +580,8 @@ export const usePromptStore = defineStore('promptStore', {
               } else {
                 let changed = false;
                 const change: { key: string; translation?: Partial<Record<LangCode, string>>; hidden?: boolean } = { key };
-                for (const l of ['en', 'zh_CN', 'es_ES'] as LangCode[]) {
+                const langs = Array.from(new Set([...(base.languages || []), ...(cur.languages || [])]));
+                for (const l of langs as LangCode[]) {
                   const a = baseTag.translation?.[l] ?? '';
                   const b = curTag.translation?.[l] ?? '';
                   if (a !== b) {
@@ -645,6 +690,88 @@ export const usePromptStore = defineStore('promptStore', {
         }
       }
       return target;
+    },
+
+    buildSnapshotDiff(base: PromptDataset, cur: PromptDataset): CustomDiff {
+      const categories: CustomDiff['categories'] = [];
+      const baseCatMap = new Map(base.categories.map((c) => [c.name, c]));
+      const curCatMap = new Map(cur.categories.map((c) => [c.name, c]));
+      for (const [name, curCat] of curCatMap.entries()) {
+        const baseCat = baseCatMap.get(name);
+        const catDiff: CustomDiff['categories'][number] = { name };
+        if (!baseCat) {
+          catDiff.addedGroups = curCat.groups.map((g) => deepClone(g));
+        } else {
+          const baseGrpMap = new Map(baseCat.groups.map((g) => [g.name, g]));
+          const curGrpMap = new Map(curCat.groups.map((g) => [g.name, g]));
+          const groupsDiff: NonNullable<typeof catDiff.groups> = [];
+          for (const [gname, curGrp] of curGrpMap.entries()) {
+            const baseGrp = baseGrpMap.get(gname);
+            if (!baseGrp) {
+              if (!catDiff.addedGroups) catDiff.addedGroups = [];
+              catDiff.addedGroups.push(deepClone(curGrp));
+              continue;
+            }
+            const updated: { name: string; color?: string; added?: PromptTag[]; updated?: Array<{ key: string; translation?: Partial<Record<LangCode, string>>; hidden?: boolean }>; order?: string[] } = { name: gname } as any;
+            if ((curGrp.color || '') !== (baseGrp.color || '')) updated.color = curGrp.color;
+            const baseTagMap = new Map(baseGrp.tags.map((t) => [t.key, t]));
+            const curTagMap = new Map(curGrp.tags.map((t) => [t.key, t]));
+            const addList: PromptTag[] = [];
+            const updList: Array<{ key: string; translation?: Partial<Record<LangCode, string>>; hidden?: boolean }> = [];
+            for (const [key, curTag] of curTagMap.entries()) {
+              const baseTag = baseTagMap.get(key);
+              if (!baseTag) {
+                addList.push(deepClone(curTag));
+              } else {
+                let changed = false;
+                const change: { key: string; translation?: Partial<Record<LangCode, string>>; hidden?: boolean } = { key };
+                const langs = Array.from(new Set([...(base.languages || []), ...(cur.languages || [])]));
+                for (const l of langs as LangCode[]) {
+                  const a = baseTag.translation?.[l] ?? '';
+                  const b = curTag.translation?.[l] ?? '';
+                  if (a !== b) {
+                    if (!change.translation) change.translation = {};
+                    change.translation[l] = b;
+                    changed = true;
+                  }
+                }
+                const aHidden = !!baseTag.hidden;
+                const bHidden = !!curTag.hidden;
+                if (aHidden !== bHidden) { change.hidden = bHidden; changed = true; }
+                if (changed) updList.push(change);
+              }
+            }
+            const baseOrder = baseGrp.tags.map((t) => t.key);
+            const curOrder = curGrp.tags.map((t) => t.key);
+            const orderChanged = baseOrder.length !== curOrder.length || baseOrder.some((k, i) => k !== curOrder[i]);
+            if (updated.color || addList.length || updList.length || orderChanged) {
+              if (updated.color) updated.color = updated.color;
+              if (addList.length) updated.added = addList;
+              if (updList.length) updated.updated = updList;
+              if (orderChanged) updated.order = curOrder;
+              groupsDiff.push(updated as any);
+            }
+          }
+          if (groupsDiff.length) catDiff.groups = groupsDiff;
+        }
+        if (catDiff.addedGroups?.length || catDiff.groups?.length) {
+          categories.push(catDiff);
+        }
+      }
+      return { categories };
+    },
+
+    sanitizeDiff(diff: CustomDiff): CustomDiff {
+      const clean: CustomDiff = { categories: [] };
+      for (const c of diff.categories || []) {
+        const entry: any = { name: c.name };
+        if (c.addedGroups && c.addedGroups.length) entry.addedGroups = c.addedGroups;
+        if (c.groups && c.groups.length) {
+          entry.groups = c.groups.map((g) => ({ name: g.name, color: g.color, added: g.added, updated: g.updated, order: g.order }));
+        }
+        if (entry.addedGroups || entry.groups) clean.categories.push(entry);
+      }
+      return clean;
     },
 
     // 扩展预设管理方法
