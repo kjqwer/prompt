@@ -5,6 +5,31 @@ import type { PromptDataset, PromptCategory, PromptGroup, PromptTag, LangCode, E
 const LS_KEY = 'ops.prompt.dataset.v1';
 let saveTimer: number | null = null; // 非响应式计时器，避免递归更新
 let baseline: PromptDataset | null = null; // 基线词库（从 public/sd 加载）
+let tagIndex: Map<string, PromptTag> | null = null;
+let tagNormIndex: Map<string, PromptTag> | null = null;
+
+function rebuildTagIndex(dataset: PromptDataset | null) {
+  if (!dataset) {
+    tagIndex = null;
+    tagNormIndex = null;
+    return;
+  }
+  tagIndex = new Map();
+  tagNormIndex = new Map();
+  for (const cat of dataset.categories) {
+    for (const g of cat.groups) {
+      for (const t of g.tags) {
+        if (!tagIndex.has(t.key)) {
+          tagIndex.set(t.key, t);
+        }
+        const norm = normalizeKeyForMatch(t.key);
+        if (!tagNormIndex.has(norm)) {
+          tagNormIndex.set(norm, t);
+        }
+      }
+    }
+  }
+}
 
 function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
@@ -115,6 +140,9 @@ export const usePromptStore = defineStore('promptStore', {
         this.dataset = deepClone(baseline!);
         this.promptText = '1girl, solo, long hair, blue eyes, smile, looking_at_viewer, upper_body, outdoors, sunset';
       }
+      // 建立索引
+      rebuildTagIndex(this.dataset);
+
       // 若无恢复语言，则默认使用 zh_CN
       if (!this.selectedLang) {
         this.selectedLang = 'zh_CN' as LangCode;
@@ -172,6 +200,7 @@ export const usePromptStore = defineStore('promptStore', {
           console.warn('检测到预设数据，请使用预设管理页面的导入功能来导入预设数据');
         }
       }
+      rebuildTagIndex(this.dataset);
       this.selectedCategoryIndex = 0;
       this.selectedGroupIndex = 0;
       this.save();
@@ -248,11 +277,13 @@ export const usePromptStore = defineStore('promptStore', {
       if (!grp) return;
       // 新增提示词插入到列表顶部，便于用户立即编辑
       grp.tags.unshift({ key, translation: { en: key, [this.selectedLang]: key } });
+      rebuildTagIndex(this.dataset);
     },
     removeTag(groupId: string, key: string) {
       const grp = this.findGroupById(groupId);
       if (!grp) return;
       grp.tags = grp.tags.filter((t) => t.key !== key);
+      rebuildTagIndex(this.dataset);
     },
     updateTagKey(groupId: string, oldKey: string, newKey: string) {
       const grp = this.findGroupById(groupId);
@@ -262,6 +293,7 @@ export const usePromptStore = defineStore('promptStore', {
       tag.key = newKey;
       if (!tag.translation) tag.translation = {};
       tag.translation.en = newKey;
+      rebuildTagIndex(this.dataset);
     },
     setTranslation(groupId: string, key: string, lang: LangCode, val: string) {
       const grp = this.findGroupById(groupId);
@@ -432,16 +464,13 @@ export const usePromptStore = defineStore('promptStore', {
       this.promptText = tokens.join(', ');
     },
     getTagByKey(key: string): PromptTag | null {
-      const target = normalizeKeyForMatch(key);
-      for (const cat of this.dataset?.categories || []) {
-        for (const g of cat.groups) {
-          for (const t of g.tags) {
-            if (t.key === key) return t; // 精确匹配优先
-            if (normalizeKeyForMatch(t.key) === target) return t; // 下划线/空格归一化匹配
-          }
-        }
+      if (!tagIndex && this.dataset) {
+        rebuildTagIndex(this.dataset);
       }
-      return null;
+      if (!tagIndex || !tagNormIndex) return null;
+      if (tagIndex.has(key)) return tagIndex.get(key)!;
+      const target = normalizeKeyForMatch(key);
+      return tagNormIndex.get(target) || null;
     },
     getTranslation(key: string, lang: LangCode): string | null {
       // 兼容包裹层：如 {aaa}、(aaa) 等
@@ -485,6 +514,7 @@ export const usePromptStore = defineStore('promptStore', {
       }
       const grp = this.ensureCustomGroup();
       grp.tags.push({ key, translation: { en: key, [lang]: val } });
+      rebuildTagIndex(this.dataset);
     },
     ensureCustomGroup(): PromptGroup {
       const catName = 'Custom';

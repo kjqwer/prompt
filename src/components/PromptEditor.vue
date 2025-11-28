@@ -18,6 +18,17 @@ const startY = ref(0);
 const lastX = ref(0);
 const lastY = ref(0);
 const dragStarted = ref(false);
+const dragContainer = ref<HTMLElement | null>(null);
+const cachedTokenRects = ref<{
+  index: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  midX: number;
+}[]>([]);
+let rafId: number | null = null;
+
 const DRAG_THRESHOLD = 3; // 像素阈值，避免误触
 const editingIndex = ref<number | null>(null);
 const editingValue = ref('');
@@ -316,6 +327,24 @@ function onPointerDown(index: number, e: PointerEvent) {
   isDragging.value = false;
   insertSide.value = null;
 
+  // 缓存所有 Token 的位置信息 (相对于 dragContainer)
+  if (dragContainer.value) {
+    const selector = viewMode.value === 'compact' ? '.pe-token-compact' : '.pe-token-detail';
+    const elements = dragContainer.value.querySelectorAll(selector);
+    cachedTokenRects.value = Array.from(elements).map(el => {
+      const htmlEl = el as HTMLElement;
+      const idx = parseInt(htmlEl.getAttribute('data-index') || '-1', 10);
+      return {
+        index: idx,
+        left: htmlEl.offsetLeft,
+        top: htmlEl.offsetTop,
+        width: htmlEl.offsetWidth,
+        height: htmlEl.offsetHeight,
+        midX: htmlEl.offsetLeft + htmlEl.offsetWidth / 2
+      };
+    }).filter(item => item.index !== -1);
+  }
+
   // 监听全局移动与抬起
   window.addEventListener('pointermove', handlePointerMove);
   window.addEventListener('pointerup', handlePointerUp, { once: true });
@@ -326,14 +355,25 @@ function handlePointerMove(e: PointerEvent) {
   lastY.value = e.clientY;
   const dx = e.clientX - startX.value;
   const dy = e.clientY - startY.value;
-  if (!dragStarted.value && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-    dragStarted.value = true;
-    isDragging.value = true;
-    if (draggingIndex.value != null) createPointerPreview(draggingIndex.value);
+  
+  if (!dragStarted.value) {
+    if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      dragStarted.value = true;
+      isDragging.value = true;
+      if (draggingIndex.value != null) createPointerPreview(draggingIndex.value);
+    }
+    return;
   }
+  
   if (!isDragging.value) return;
-  positionPreview(e.clientX, e.clientY);
-  updateOverIndexAndSide(e.clientX, e.clientY);
+
+  // 使用 requestAnimationFrame 节流渲染
+  if (rafId) return;
+  rafId = requestAnimationFrame(() => {
+    positionPreview(lastX.value, lastY.value);
+    updateOverIndexAndSideFast(lastX.value, lastY.value);
+    rafId = null;
+  });
 }
 
 function handlePointerUp(e: PointerEvent) {
@@ -364,6 +404,8 @@ function handlePointerUp(e: PointerEvent) {
 }
 
 function cleanupDrag() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  cachedTokenRects.value = [];
   draggingIndex.value = null;
   overIndex.value = null;
   isDragging.value = false;
@@ -403,22 +445,29 @@ function positionPreview(x: number, y: number) {
   dragPreview.value.style.transform = `translate(${x + 12}px, ${y + 12}px)`;
 }
 
-function updateOverIndexAndSide(x: number, y: number) {
-  insertSide.value = null;
-  overIndex.value = null;
-  const el = document.elementFromPoint(x, y) as HTMLElement | null;
-  if (!el) return;
-  const tokenEl = el.closest('.pe-token-compact, .pe-token-detail') as HTMLElement | null;
-  if (!tokenEl) return;
-  const idxAttr = tokenEl.getAttribute('data-index');
-  if (idxAttr == null) return;
-  const idx = parseInt(idxAttr, 10);
-  if (Number.isNaN(idx)) return;
-  if (idx === draggingIndex.value) { overIndex.value = null; insertSide.value = null; return; }
-  const rect = tokenEl.getBoundingClientRect();
-  const midX = rect.left + rect.width / 2;
-  overIndex.value = idx;
-  insertSide.value = x < midX ? 'before' : 'after';
+function updateOverIndexAndSideFast(clientX: number, clientY: number) {
+  if (!dragContainer.value) return;
+  
+  // 计算鼠标在容器内的相对坐标
+  const containerRect = dragContainer.value.getBoundingClientRect();
+  const relX = clientX - containerRect.left;
+  const relY = clientY - containerRect.top;
+
+  // 在缓存中查找命中的 Token
+  // 简单碰撞检测
+  const target = cachedTokenRects.value.find(item => 
+    relX >= item.left && relX <= item.left + item.width &&
+    relY >= item.top && relY <= item.top + item.height
+  );
+
+  if (!target || target.index === draggingIndex.value) {
+    overIndex.value = null;
+    insertSide.value = null;
+    return;
+  }
+
+  overIndex.value = target.index;
+  insertSide.value = relX < target.midX ? 'before' : 'after';
 }
 
 function beginEdit(i: number) {
@@ -717,7 +766,7 @@ function isRemoveDisabled(token: string): boolean {
           </div>
         </div>
         
-        <div class="pe-drag-container" :class="{ 'is-dragging': isDragging }">
+        <div class="pe-drag-container" ref="dragContainer" :class="{ 'is-dragging': isDragging }">
         <div class="pe-tokens-compact" v-if="viewMode === 'compact'">
           <div
             v-for="(k,i) in tokens"
