@@ -233,17 +233,13 @@ function deletePreset(preset: ExtendedPreset) {
   }
 }
 
-function duplicatePreset(preset: ExtendedPreset) {
-  const newPreset = {
-    name: `${preset.name} - 副本`,
-    type: preset.type,
-    content: preset.content,
-    description: preset.description,
-    tags: preset.tags,
-    folderId: preset.folderId
-  };
-  store.createExtendedPreset(newPreset);
-  showNotification(`预设「${newPreset.name}」已创建`, 'success');
+async function copyPresetContent(preset: ExtendedPreset) {
+  try {
+    await navigator.clipboard.writeText(preset.content);
+    showNotification(`预设「${preset.name}」内容已复制到剪贴板`, 'success');
+  } catch (error) {
+    showNotification('复制失败，请手动复制', 'error');
+  }
 }
 
 function applyPreset(preset: ExtendedPreset) {
@@ -506,7 +502,7 @@ onMounted(() => {
                   <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </button>
-              <button @click="duplicatePreset(preset)" class="pm-action-btn" title="复制预设">
+              <button @click="copyPresetContent(preset)" class="pm-action-btn" title="复制内容到剪贴板">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
                   <path d="m5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
