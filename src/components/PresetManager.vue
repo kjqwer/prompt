@@ -491,7 +491,7 @@ onMounted(() => {
           
           <div class="form-group">
             <label>内容</label>
-            <textarea v-model="presetForm.content" rows="5" placeholder="预设的提示词内容..."></textarea>
+            <textarea v-model="presetForm.content" rows="10" placeholder="预设的提示词内容..."></textarea>
           </div>
           
           <div class="form-group">
@@ -727,17 +727,23 @@ onMounted(() => {
 
 .modal-content {
   background-color: var(--color-bg-primary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   width: 90%;
-  max-width: 500px;
+  max-width: 800px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
+  animation: modal-in 0.2s ease-out;
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .modal-header {
-  padding: 1rem 1.5rem;
+  padding: 1.25rem 1.75rem;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
@@ -746,32 +752,40 @@ onMounted(() => {
 
 .modal-header h3 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 600;
 }
 
 .close-btn {
   background: transparent;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   color: var(--color-text-tertiary);
   cursor: pointer;
   line-height: 1;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-secondary);
 }
 
 .modal-body {
-  padding: 1.5rem;
+  padding: 1.75rem;
   overflow-y: auto;
 }
 
 .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .form-group label {
   display: block;
   margin-bottom: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   font-weight: 500;
   color: var(--color-text-secondary);
 }
@@ -780,16 +794,30 @@ onMounted(() => {
 .form-group select,
 .form-group textarea {
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background-color: var(--color-bg-secondary);
   color: var(--color-text-primary);
   font-family: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+  background-color: var(--color-bg-primary);
 }
 
 .form-group textarea {
   resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 .form-row {

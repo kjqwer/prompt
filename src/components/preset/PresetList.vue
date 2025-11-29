@@ -287,20 +287,32 @@ function formatDate(dateStr: string) {
 }
 
 .preset-preview {
-  font-family: monospace;
-  font-size: 0.8125rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
   color: var(--color-text-secondary);
   background-color: var(--color-bg-tertiary);
-  padding: 0.5rem;
+  padding: 0.75rem;
   border-radius: var(--radius-md);
-  height: 3.5rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3; 
-  -webkit-box-orient: vertical;
+  height: 7rem;
+  overflow-y: auto;
   margin-bottom: 0.5rem;
-  word-break: break-all;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.preset-preview::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.preset-preview::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-hover);
+  border-radius: 2px;
+}
+
+.preset-preview::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .preset-desc {
