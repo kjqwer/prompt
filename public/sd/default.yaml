@@ -10530,6 +10530,84 @@
         pixel art:
         monochrome:
         colorful:
+        amazing quality:
+        incredible quality:
+        excellent quality:
+        very aesthetic:
+        aesthetic:
+        cinema-quality:
+        cinematic quality:
+        film grain:
+        razor sharp:
+        pin-sharp:
+        tack sharp:
+        crisp lines:
+        sharp lines:
+        crisp focus:
+        sharp focus:
+        highly detailed:
+        extremely detailed:
+        ultra detailed:
+        finely detailed:
+        intricate details:
+        insane details:
+        beautiful detailed:
+        beautiful details:
+        perfect lighting:
+        studio quality:
+        professional quality:
+        magazine quality:
+        award-winning:
+        high fidelity:
+        ultra fidelity:
+        noise-free:
+        denoised:
+        clean lines:
+        clean edges:
+        smooth shading:
+        sharp details:
+        vivid colors:
+        rich details:
+        perfect details:
+        hires:
+        hi-res:
+        high resolution:
+        4k resolution:
+        8k resolution:
+        UHD resolution:
+        photorealism:
+        photo realistic:
+        photo-realistic:
+        hyper-realistic:
+        Dolby Vision:
+        HDR10:
+        HDR10+:
+        lossless:
+        no compression artifacts:
+        crystal clear:
+        pristine quality:
+        clear image:
+        masterpiece:
+        best quality:
+        high quality:
+        very high quality:
+        ultra high quality:
+        top quality:
+        perfect quality:
+        high definition:
+        ultra high definition:
+        UHD:
+        HD:
+        4k:
+        8k:
+        32k:
+        HDR:
+        high dynamic range:
+        super-resolution:
+        photorealistic:
+        hyperrealistic:
+        raw photo:
+        DSLR:
     - name: Art style
       color: rgba(0, 255, 255, .4)
       tags:

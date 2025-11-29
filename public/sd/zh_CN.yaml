@@ -9738,6 +9738,84 @@
         pixel art: 点阵图
         monochrome: 单色图片
         colorful: 色彩斑斓的
+        amazing quality: 惊艳质量
+        incredible quality: 难以置信的质量
+        excellent quality: 卓越质量
+        very aesthetic: 极具美感
+        aesthetic: 美感
+        cinema-quality: 电影级画质
+        cinematic quality: 电影级画质
+        film grain: 胶片颗粒
+        razor sharp: 极致锐利
+        pin-sharp: 针尖般锐利
+        tack sharp: 十分锐利
+        crisp lines: 清晰线条
+        sharp lines: 锐利线条
+        crisp focus: 清晰对焦
+        sharp focus: 锐聚焦
+        highly detailed: 高度细节
+        extremely detailed: 极其细致
+        ultra detailed: 超详细
+        finely detailed: 精细细节
+        intricate details: 繁复细节
+        insane details: 极度细节
+        beautiful detailed: 精美细节
+        beautiful details: 精美细节
+        perfect lighting: 完美光照
+        studio quality: 影棚级画质
+        professional quality: 专业级画质
+        magazine quality: 杂志级画质
+        award-winning: 获奖级质量
+        high fidelity: 高保真
+        ultra fidelity: 超高保真
+        noise-free: 无噪点
+        denoised: 去噪
+        clean lines: 干净线条
+        clean edges: 干净边缘
+        smooth shading: 平滑着色
+        sharp details: 锐利细节
+        vivid colors: 鲜艳色彩
+        rich details: 细节丰富
+        perfect details: 完美细节
+        hires: 高分辨率
+        hi-res: 高分辨率
+        high resolution: 高分辨率
+        4k resolution: 4K分辨率
+        8k resolution: 8K分辨率
+        UHD resolution: 超高清分辨率
+        photorealism: 照片写实
+        photo realistic: 照片写实
+        photo-realistic: 照片写实
+        hyper-realistic: 超写实
+        Dolby Vision: 杜比视界
+        HDR10: HDR10
+        HDR10+: HDR10+
+        lossless: 无损
+        no compression artifacts: 无压缩伪影
+        crystal clear: 清澈通透
+        pristine quality: 完美无瑕画质
+        clear image: 清晰图像
+        masterpiece: 杰作
+        best quality: 最佳质量
+        high quality: 高质量
+        very high quality: 非常高质量
+        ultra high quality: 超高质量
+        top quality: 顶级质量
+        perfect quality: 完美质量
+        high definition: 高清
+        ultra high definition: 超高清
+        UHD: 超高清
+        HD: 高清
+        4k: 4K
+        8k: 8K
+        32k: 32K
+        HDR: 高动态范围
+        high dynamic range: 高动态范围
+        super-resolution: 超分辨率
+        photorealistic: 照片级真实
+        hyperrealistic: 超写实
+        raw photo: RAW照片
+        DSLR: 单反照片
     - name: 艺术风格
       color: rgba(0, 255, 255, .4)
       tags:
@@ -10228,7 +10306,7 @@
         caustic: 焦散
         sharp focus: 锐聚焦
         depth of field: 景深
-        hdr: hdr
+        hdr: 高动态范围
         blurred picture: 模糊
         blurry background: 模糊背景
         blurry foreground: 模糊前景
