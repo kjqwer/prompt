@@ -4,6 +4,7 @@ import { usePromptStore } from '../stores/promptStore';
 import type { LangCode } from '../types';
 import NotificationToast from './NotificationToast.vue';
 import PresetDropdown from './PresetDropdown.vue';
+import TranslationPopup from './TranslationPopup.vue';
 
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
@@ -37,6 +38,7 @@ const addingMapValue = ref('');
 const presetName = ref('');
 const viewMode = ref<'compact' | 'detail'>('compact');
 const showPresetDropdown = ref(false);
+const showTranslationPopup = ref(false);
 const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ 
   message: '', 
   type: 'info', 
@@ -612,6 +614,45 @@ function applyEditSuggestion(s: string) {
   updateEditSuggestions();
 }
 
+const unmappedTokens = computed(() => {
+  return tokens.value.filter(k => displayTrans(k) === k);
+});
+
+function handleApplyTranslation(results: { key: string; trans: string }[]) {
+  results.forEach(({ key, trans }) => {
+    store.addMapping(key, selectedLang.value, trans);
+  });
+  showNotification(`已添加 ${results.length} 条映射`, 'success');
+}
+
+async function autoTranslateSingle() {
+  if (addingMapIndex.value == null) return;
+  const key = tokens.value[addingMapIndex.value];
+  if (!key) return;
+  
+  try {
+    let target = selectedLang.value as string;
+    if (target === 'zh_CN') target = 'zh';
+    
+    // 移除包裹层和下划线
+    const { core } = store.parseTokenWrappers(key);
+    const cleanText = core.replace(/_/g, ' ');
+    
+    const url = `https://sywb.top/api/translate2?text=${encodeURIComponent(cleanText)}&sourceLang=auto&targetLang=${target}`;
+    
+    const res = await fetch(url);
+    const data = await res.json();
+    
+    if (data.success && data.translation) {
+      addingMapValue.value = data.translation;
+    } else {
+      showNotification('翻译失败', 'error');
+    }
+  } catch {
+    showNotification('翻译请求失败', 'error');
+  }
+}
+
 function displayTrans(key: string): string {
   const { core, wrappers } = store.parseTokenWrappers(key);
   const m = core.match(/:(\d+(?:\.\d+)?)$/);
@@ -762,6 +803,22 @@ function isRemoveDisabled(token: string): boolean {
       <section class="pe-right-pane">
         <div class="pe-section-title mode">
           <span>提示词映射（双击修改）</span>
+          <button 
+            v-if="unmappedTokens.length > 0" 
+            class="pe-auto-trans-btn" 
+            @click="showTranslationPopup = true"
+            title="自动翻译未映射词条"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M5 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 14l6-6 2-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M7 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M22 22l-5-13-5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M14.2 18h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            自动翻译
+          </button>
           <div class="pe-mode-switch">
             <button :class="{ active: viewMode==='compact' }" @click="viewMode='compact'">精简视图</button>
             <button :class="{ active: viewMode==='detail' }" @click="viewMode='detail'">详细视图</button>
@@ -945,6 +1002,16 @@ function isRemoveDisabled(token: string): boolean {
             <div v-if="addingMapIndex === i" class="pe-add-panel">
               <input v-model="addingMapValue" :placeholder="`请输入 ${selectedLang} 的翻译`" @keyup.enter="commitAddMap" />
               <div class="pe-add-actions">
+                <button @click="autoTranslateSingle" class="pe-trans-btn" title="自动翻译">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M5 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M4 14l6-6 2-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M7 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M22 22l-5-13-5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M14.2 18h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
                 <button @click="commitAddMap" class="pe-confirm-btn">添加</button>
                 <button @click="() => { addingMapIndex = null; addingMapValue = ''; }" class="pe-cancel-btn">取消</button>
               </div>
@@ -955,6 +1022,15 @@ function isRemoveDisabled(token: string): boolean {
       </section>
     </main>
     
+    <!-- 翻译弹窗 -->
+    <TranslationPopup
+      :visible="showTranslationPopup"
+      :tokens="unmappedTokens"
+      :target-lang="selectedLang"
+      @close="showTranslationPopup = false"
+      @apply="handleApplyTranslation"
+    />
+
     <!-- 通知组件 -->
     <NotificationToast 
       :message="notification.message"
@@ -2268,5 +2344,47 @@ function isRemoveDisabled(token: string): boolean {
 .pe-input-actions button svg,
 .pe-preset-toggle svg {
   flex-shrink: 0;
+}
+
+.pe-auto-trans-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pe-auto-trans-btn:hover {
+  background-color: var(--color-bg-tertiary);
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+}
+
+.pe-trans-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem; 
+  height: 100%; 
+  aspect-ratio: 1;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pe-trans-btn:hover {
+  background-color: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
 }
 </style>
