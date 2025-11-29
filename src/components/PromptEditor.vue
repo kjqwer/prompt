@@ -802,23 +802,25 @@ function isRemoveDisabled(token: string): boolean {
       
       <section class="pe-right-pane">
         <div class="pe-section-title mode">
-          <span>提示词映射（双击修改）</span>
-          <button 
-            v-if="unmappedTokens.length > 0" 
-            class="pe-auto-trans-btn" 
-            @click="showTranslationPopup = true"
-            title="自动翻译未映射词条"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4 14l6-6 2-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M2 5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M7 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M22 22l-5-13-5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M14.2 18h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            自动翻译
-          </button>
+          <div class="pe-title-group">
+            <span>提示词映射（双击修改）</span>
+            <button 
+              v-if="unmappedTokens.length > 0" 
+              class="pe-auto-trans-btn" 
+              @click="showTranslationPopup = true"
+              title="自动翻译未映射词条"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4 14l6-6 2-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M7 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M22 22l-5-13-5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M14.2 18h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              自动翻译
+            </button>
+          </div>
           <div class="pe-mode-switch">
             <button :class="{ active: viewMode==='compact' }" @click="viewMode='compact'">精简视图</button>
             <button :class="{ active: viewMode==='detail' }" @click="viewMode='detail'">详细视图</button>
@@ -1334,6 +1336,12 @@ function isRemoveDisabled(token: string): boolean {
   margin-bottom: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.pe-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .pe-mode-switch {
