@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/dog.ico" />
+  <link rel="icon" type="image/svg+xml" href="/prompt.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- 基本 SEO -->
   <meta name="description"
@@ -129,11 +129,25 @@
     }
     </script>
   <title>提示词编辑器</title>
+  <style>
+    /* 用于 SEO 的隐藏标题，避免页面加载时闪烁 */
+    .seo-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  </style>
 </head>
 
 <body>
   <div id="app">
-    <h1>AI 提示词编辑器 - 支持语言翻译与词库管理的智能工具</h1>
+    <h1 class="seo-hidden">AI 提示词编辑器 - 支持多语言翻译与词库管理的智能工具</h1>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>
