@@ -591,15 +591,17 @@ onUnmounted(() => {
           <span>⌨️ ESC 关闭面板</span>
         </div>
       </div>
-      
-      <!-- 通知组件 -->
-      <NotificationToast 
-        :message="notification.message"
-        :type="notification.type"
-        :show="notification.show"
-      />
     </div>
   </Transition>
+
+  <!-- 通知组件 - 使用 Teleport 避免被遮挡 -->
+  <Teleport to="body">
+    <NotificationToast 
+      :message="notification.message"
+      :type="notification.type"
+      :show="notification.show"
+    />
+  </Teleport>
 </template>
 
 <style scoped>

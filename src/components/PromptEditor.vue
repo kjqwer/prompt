@@ -1444,6 +1444,7 @@ function isRemoveDisabled(token: string): boolean {
   border-radius: var(--radius-md);
   padding: 0.5rem 0.75rem;
   cursor: grab;
+  user-select: none;
   transition: all 0.2s ease;
   max-width: 100%;
 }
@@ -1489,6 +1490,7 @@ function isRemoveDisabled(token: string): boolean {
   color: var(--color-text-primary);
   font-size: 0.8125rem;
   transition: all 0.2s ease;
+  user-select: text;
 }
 
 .pe-edit-input::placeholder {
@@ -1696,6 +1698,7 @@ function isRemoveDisabled(token: string): boolean {
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
   overflow: hidden;
+  user-select: none;
 }
 
 .pe-token-detail:hover {
@@ -1870,6 +1873,7 @@ function isRemoveDisabled(token: string): boolean {
   font-size: 0.875rem;
   margin-bottom: 0.5rem;
   transition: all 0.2s ease;
+  user-select: text;
 }
 
 .pe-edit-panel input:focus, .pe-add-panel input:focus {
