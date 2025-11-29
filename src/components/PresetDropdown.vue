@@ -327,15 +327,15 @@ function importPreset(event: Event) {
 
 function getTypeIcon(type: string) {
   const icons: Record<string, string> = {
-    positive: '👍',
-    negative: '👎',
+    positive: '🪄',
+    negative: '⛔',
     setting: '⚙️',
-    style: '🎨',
-    character: '👤',
-    scene: '🌍',
-    custom: '📝'
+    style: '🖌️',
+    character: '🧙',
+    scene: '🏞️',
+    custom: '🧩'
   };
-  return icons[type] || '📝';
+  return icons[type] || '🧩';
 }
 
 function getTypeLabel(type: string) {

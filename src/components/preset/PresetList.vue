@@ -16,15 +16,15 @@ const emit = defineEmits<{
 
 function getTypeIcon(type: PresetType) {
   const icons: Record<string, string> = {
-    positive: '👍',
-    negative: '👎',
+    positive: '🪄',
+    negative: '⛔',
     setting: '⚙️',
-    style: '🎨',
-    character: '👤',
-    scene: '🌍',
-    custom: '📝'
+    style: '🖌️',
+    character: '🧙',
+    scene: '🏞️',
+    custom: '🧩'
   };
-  return icons[type] || '📝';
+  return icons[type] || '🧩';
 }
 
 function getTypeLabel(type: PresetType) {

@@ -54,13 +54,13 @@ function showNotification(message: string, type: 'success' | 'error' | 'info' = 
 
 // Preset Types
 const presetTypes: { value: PresetType; label: string; icon: string }[] = [
-  { value: 'positive', label: '正面提示词', icon: '👍' },
-  { value: 'negative', label: '负面提示词', icon: '👎' },
+  { value: 'positive', label: '正面提示词', icon: '🪄' },
+  { value: 'negative', label: '负面提示词', icon: '⛔' },
   { value: 'setting', label: '设定标签', icon: '⚙️' },
-  { value: 'style', label: '风格样式', icon: '🎨' },
-  { value: 'character', label: '角色人物', icon: '👤' },
-  { value: 'scene', label: '场景环境', icon: '🌍' },
-  { value: 'custom', label: '自定义', icon: '📝' }
+  { value: 'style', label: '风格样式', icon: '🖌️' },
+  { value: 'character', label: '角色人物', icon: '🧙' },
+  { value: 'scene', label: '场景环境', icon: '🏞️' },
+  { value: 'custom', label: '自定义', icon: '🧩' }
 ];
 
 // Computed
