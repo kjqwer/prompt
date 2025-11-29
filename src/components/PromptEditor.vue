@@ -631,7 +631,8 @@ function isRemoveDisabled(token: string): boolean {
 <template>
   <div class="pe-root">
     <header class="pe-toolbar">
-      <div class="pe-left">
+      <div class="pe-toolbar-content">
+        <div class="pe-left">
         <label>语言</label>
         <select v-model="selectedLang">
           <option v-for="l in store.languages" :key="l" :value="l">{{ l }}</option>
@@ -685,6 +686,7 @@ function isRemoveDisabled(token: string): boolean {
             @rename="handlePresetRename"
           />
         </div>
+      </div>
       </div>
     </header>
 
@@ -972,12 +974,18 @@ function isRemoveDisabled(token: string): boolean {
 }
 
 .pe-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 1rem 1.5rem;
   background-color: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
+}
+
+.pe-toolbar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
   gap: 1rem;
   flex-wrap: wrap;
 }
@@ -1229,6 +1237,9 @@ function isRemoveDisabled(token: string): boolean {
   height: calc(100vh - 8rem);
   gap: 1px;
   background-color: var(--color-border);
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 
 .pe-left-pane, .pe-right-pane {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
-import type { PromptPreset } from '../types';
+import type { PromptPreset, PresetType } from '../types';
 import NotificationToast from './NotificationToast.vue';
 
 const store = usePromptStore();
@@ -48,21 +48,28 @@ const filteredPresets = computed(() => {
   const q = presetSearch.value.trim().toLowerCase();
   // 合并旧预设和新预设，优先显示新预设
   let list = [
-    ...store.extendedPresets.map(p => ({
-      name: p.name,
-      text: p.content,
-      updatedAt: p.updatedAt,
-      type: p.type,
-      description: p.description,
-      isExtended: true
-    })),
+    ...store.extendedPresets.map(p => {
+      const folder = p.folderId ? store.presetFolders.find(f => f.id === p.folderId) : null;
+      return {
+        name: p.name,
+        text: p.content,
+        updatedAt: p.updatedAt,
+        type: p.type,
+        description: p.description,
+        isExtended: true,
+        folderId: p.folderId,
+        folderName: folder ? folder.name : '未分类'
+      };
+    }),
     ...store.presets.map(p => ({
       name: p.name,
       text: p.text,
       updatedAt: p.updatedAt,
       type: 'positive' as const,
       description: undefined,
-      isExtended: false
+      isExtended: false,
+      folderId: null,
+      folderName: '未分类'
     }))
   ];
   
@@ -125,6 +132,31 @@ const filteredPresets = computed(() => {
   });
   
   return list;
+});
+
+const groupedPresets = computed(() => {
+  const list = filteredPresets.value;
+  // 如果有搜索或者排序不是默认的，使用平铺列表（视为一个组）
+  if (presetSearch.value || sortBy.value !== 'date') {
+    return [{ name: presetSearch.value ? '搜索结果' : '所有预设', presets: list }];
+  }
+  
+  // 分组
+  const groups: Record<string, typeof list> = {};
+  list.forEach(p => {
+    const key = p.folderName || '未分类';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+  
+  // 转换为数组并排序
+  return Object.entries(groups)
+    .map(([name, presets]) => ({ name, presets }))
+    .sort((a, b) => {
+      if (a.name === '未分类') return 1;
+      if (b.name === '未分类') return -1;
+      return a.name.localeCompare(b.name);
+    });
 });
 
 const presetStats = computed(() => {
@@ -291,6 +323,19 @@ function importPreset(event: Event) {
   
   // 重置文件输入
   (event.target as HTMLInputElement).value = '';
+}
+
+function getTypeIcon(type: string) {
+  const icons: Record<string, string> = {
+    positive: '👍',
+    negative: '👎',
+    setting: '⚙️',
+    style: '🎨',
+    character: '👤',
+    scene: '🌍',
+    custom: '📝'
+  };
+  return icons[type] || '📝';
 }
 
 function getTypeLabel(type: string) {
@@ -462,75 +507,79 @@ onUnmounted(() => {
           <span>{{ presetSearch ? '未找到匹配的预设' : '暂无预设' }}</span>
         </div>
         
-        <div v-for="p in filteredPresets" :key="`${p.name}_${p.type}`" class="pd-item">
-          <template v-if="renamingPreset !== p.name">
-            <div class="pd-item-main" @click="loadPreset(p.name)">
-              <div class="pd-item-header">
-                <div class="pd-item-title">
-                  <span class="pd-item-name">{{ p.name }}</span>
-                  <span v-if="p.isExtended" class="pd-item-type" :class="`type-${p.type}`">
-                    {{ getTypeLabel(p.type) }}
-                  </span>
-                </div>
-                <span class="pd-item-date">{{ formatDate(p.updatedAt) }}</span>
-              </div>
-              <div class="pd-item-preview">{{ getPresetPreview(p.text) }}</div>
-              <div v-if="p.description" class="pd-item-description">{{ p.description }}</div>
-            </div>
-            
-            <div class="pd-item-actions">
-              <button @click.stop="copyPresetToClipboard(p)" class="pd-action-btn" title="复制到剪贴板">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
-                  <path d="m5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
-                </svg>
-              </button>
-              <button @click.stop="exportPreset(p)" class="pd-action-btn" title="导出">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
-                  <polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2"/>
-                  <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/>
-                </svg>
-              </button>
-              <button @click.stop="beginRename(p.name)" class="pd-action-btn" title="重命名">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/>
-                  <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/>
-                </svg>
-              </button>
-              <button @click.stop="deletePreset(p)" class="pd-action-btn pd-delete" title="删除">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/>
-                  <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
-                </svg>
-              </button>
-            </div>
-          </template>
+        <div v-for="group in groupedPresets" :key="group.name" class="pd-group">
+          <div v-if="groupedPresets.length > 1 || group.name !== '所有预设'" class="pd-group-header">
+            {{ group.name }}
+            <span class="pd-group-count">{{ group.presets.length }}</span>
+          </div>
           
-          <template v-else>
-            <div class="pd-rename-form">
-              <input 
-                v-model="renamingValue" 
-                @keyup.enter="commitRename" 
-                @keyup.escape="cancelRename"
-                @click.stop
-                class="pd-rename-input"
-              />
-              <div class="pd-rename-actions">
-                <button @click.stop="commitRename" class="pd-rename-confirm" title="确定">
+          <div v-for="p in group.presets" :key="`${p.name}_${p.type}`" class="pd-item">
+            <template v-if="renamingPreset !== p.name">
+              <div class="pd-item-main" @click="loadPreset(p.name)">
+                <div class="pd-item-header">
+                  <div class="pd-item-title">
+                    <span class="pd-item-icon" :title="getTypeLabel(p.type)">{{ getTypeIcon(p.type) }}</span>
+                    <span class="pd-item-name">{{ p.name }}</span>
+                  </div>
+                  <span class="pd-item-date">{{ formatDate(p.updatedAt) }}</span>
+                </div>
+                <div class="pd-item-preview">{{ getPresetPreview(p.text) }}</div>
+              </div>
+              
+              <div class="pd-item-actions">
+                <button @click.stop="copyPresetToClipboard(p)" class="pd-action-btn" title="复制到剪贴板">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2"/>
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+                    <path d="m5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
                   </svg>
                 </button>
-                <button @click.stop="cancelRename" class="pd-rename-cancel" title="取消">
+                <button @click.stop="exportPreset(p)" class="pd-action-btn" title="导出">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
-                    <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
+                    <polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2"/>
+                    <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/>
+                  </svg>
+                </button>
+                <button @click.stop="beginRename(p.name)" class="pd-action-btn" title="重命名">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2"/>
+                    <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2"/>
+                  </svg>
+                </button>
+                <button @click.stop="deletePreset(p)" class="pd-action-btn pd-delete" title="删除">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <polyline points="3,6 5,6 21,6" stroke="currentColor" stroke-width="2"/>
+                    <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2"/>
                   </svg>
                 </button>
               </div>
-            </div>
-          </template>
+            </template>
+            
+            <template v-else>
+              <div class="pd-rename-form">
+                <input 
+                  v-model="renamingValue" 
+                  @keyup.enter="commitRename" 
+                  @keyup.escape="cancelRename"
+                  @click.stop
+                  class="pd-rename-input"
+                />
+                <div class="pd-rename-actions">
+                  <button @click.stop="commitRename" class="pd-rename-confirm" title="确定">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <polyline points="20,6 9,17 4,12" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </button>
+                  <button @click.stop="cancelRename" class="pd-rename-cancel" title="取消">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2"/>
+                      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
 
@@ -758,7 +807,7 @@ onUnmounted(() => {
 .pd-list {
   flex: 1;
   overflow-y: auto;
-  max-height: 300px;
+  max-height: 350px;
 }
 
 .pd-empty {
@@ -778,10 +827,33 @@ onUnmounted(() => {
   opacity: 0.5;
 }
 
+.pd-group-header {
+  padding: 0.5rem 1rem;
+  background-color: var(--color-bg-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.pd-group-count {
+  background-color: var(--color-bg-primary);
+  padding: 0.125rem 0.375rem;
+  border-radius: 99px;
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
+}
+
 .pd-item {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 1rem;
   border-bottom: 1px solid var(--color-border);
   transition: all 0.2s ease;
 }
@@ -802,7 +874,7 @@ onUnmounted(() => {
 
 .pd-item-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 0.25rem;
 }
@@ -822,50 +894,12 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  flex: 1;
 }
 
-.pd-item-type {
-  padding: 0.125rem 0.375rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.6875rem;
-  font-weight: 500;
+.pd-item-icon {
+  font-size: 1rem;
+  line-height: 1;
   flex-shrink: 0;
-}
-
-.pd-item-type.type-positive {
-  background-color: #dcfce7;
-  color: #166534;
-}
-
-.pd-item-type.type-negative {
-  background-color: #fee2e2;
-  color: #991b1b;
-}
-
-.pd-item-type.type-setting {
-  background-color: #e0e7ff;
-  color: #3730a3;
-}
-
-.pd-item-type.type-style {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.pd-item-type.type-character {
-  background-color: #f3e8ff;
-  color: #6b21a8;
-}
-
-.pd-item-type.type-scene {
-  background-color: #ecfdf5;
-  color: #047857;
-}
-
-.pd-item-type.type-custom {
-  background-color: #f1f5f9;
-  color: #475569;
 }
 
 .pd-item-date {
@@ -878,29 +912,19 @@ onUnmounted(() => {
 .pd-item-preview {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
-  line-height: 1.3;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 0.25rem;
-}
-
-.pd-item-description {
-  font-size: 0.6875rem;
-  color: var(--color-text-tertiary);
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-style: italic;
+  opacity: 0.8;
 }
 
 .pd-item-actions {
   display: flex;
   gap: 0.25rem;
-  opacity: 0.7;
+  opacity: 0;
   transition: opacity 0.2s ease;
-  margin-left: 0.5rem;
+  margin-left: 0.75rem;
 }
 
 .pd-item:hover .pd-item-actions {
