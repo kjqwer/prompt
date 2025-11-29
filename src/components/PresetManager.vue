@@ -5,6 +5,7 @@ import type { ExtendedPreset, PresetFolder, PresetType } from '../types';
 import NotificationToast from './NotificationToast.vue';
 import PresetSidebar from './preset/PresetSidebar.vue';
 import PresetList from './preset/PresetList.vue';
+import FolderSelector from './preset/FolderSelector.vue';
 
 const store = usePromptStore();
 
@@ -131,26 +132,6 @@ const flattenedFolders = computed(() => {
   }
   walk(folderTree.value, 0, '');
   return res;
-});
-
-// Parent options for folder dialog (exclude self and children)
-const flattenedParentOptions = computed(() => {
-  const exclude = new Set<string>();
-  if (editingFolder.value) {
-    exclude.add(editingFolder.value.id);
-    
-    // Helper to find descendants
-    const all = store.presetFolders || [];
-    function walk(id: string) {
-      const children = all.filter(f => f.parentId === id);
-      for (const c of children) {
-        exclude.add(c.id);
-        walk(c.id);
-      }
-    }
-    walk(editingFolder.value.id);
-  }
-  return flattenedFolders.value.filter(f => !exclude.has(f.id));
 });
 
 const allPresetsCount = computed(() => (store.extendedPresets || []).length);
@@ -480,12 +461,12 @@ onMounted(() => {
             </div>
             <div class="form-group">
               <label>文件夹</label>
-              <select v-model="presetForm.folderId">
-                <option value="">(无 - 未分类)</option>
-                <option v-for="f in flattenedFolders" :key="f.id" :value="f.id">
-                  {{ f.label }}
-                </option>
-              </select>
+              <FolderSelector
+                v-model="presetForm.folderId"
+                :tree="folderTree"
+                :flattened="flattenedFolders"
+                root-label="(无 - 未分类)"
+              />
             </div>
           </div>
           
@@ -526,12 +507,13 @@ onMounted(() => {
           
           <div class="form-group">
             <label>父文件夹</label>
-            <select v-model="folderForm.parentId">
-              <option value="">(无 - 根文件夹)</option>
-              <option v-for="f in flattenedParentOptions" :key="f.id" :value="f.id">
-                {{ f.label }}
-              </option>
-            </select>
+            <FolderSelector
+              v-model="folderForm.parentId"
+              :tree="folderTree"
+              :flattened="flattenedFolders"
+              :exclude-id="editingFolder?.id"
+              root-label="(无 - 根文件夹)"
+            />
           </div>
           
           <div class="form-group">
