@@ -334,17 +334,17 @@ body {
 /* 视图切换动画 */
 .view-transition-enter-active,
 .view-transition-leave-active {
-  transition: all 0.3s ease;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
 .view-transition-enter-from {
   opacity: 0;
-  transform: translateX(20px);
+  transform: translateX(10px);
 }
 
 .view-transition-leave-to {
   opacity: 0;
-  transform: translateX(-20px);
+  transform: translateX(-10px);
 }
 
 /* 响应式设计 */
