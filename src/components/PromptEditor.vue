@@ -133,7 +133,7 @@ function currentEditEl(): HTMLInputElement | null {
   return Array.isArray(raw) ? (raw[0] ?? null) : raw;
 }
 const priorityStyle = ref<'{}' | '()' | '[]' | '<>' | 'suffix'>('{}');
-const priorityStep = ref(1);
+const priorityStep = ref(0.1);
 function splitTokensLocal(txt: string): string[] {
   return splitTokens(txt);
 }
@@ -176,9 +176,12 @@ function adjustWeight(core: string, delta: number): string {
   const decimals = stepStr.includes('.') ? stepStr.split('.')[1]!.length : 0;
   const cur = w == null ? 1.0 : w;
   let nw = cur + delta;
-  if (delta < 0 && nw <= 1.0) return base;
-  nw = Math.min(2.0, Math.max(0.1, nw));
+  
   nw = roundToDecimals(nw, decimals);
+
+  // If weight is 1, return base without suffix
+  if (nw === 1) return base;
+
   return base + ':' + nw;
 }
 const text = ref('');
@@ -773,8 +776,14 @@ function applyEditSuggestion(s: string) {
 }
 
 const unmappedTokens = computed(() => {
-  return tokens.value.filter(k => displayTrans(k) === k);
+  return tokens.value.filter(k => isUnmapped(k));
 });
+
+function isUnmapped(key: string): boolean {
+  const { core } = parseDetailedToken(key);
+  const tag = store.getTagByKey(core);
+  return !tag || !tag.translation?.[selectedLang.value];
+}
 
 function handleApplyTranslation(results: { key: string; trans: string }[]) {
   results.forEach(({ key, trans }) => {
@@ -792,9 +801,11 @@ async function autoTranslateSingle() {
     let target = selectedLang.value as string;
     if (target === 'zh_CN') target = 'zh';
     
-    // 移除包裹层和下划线
-    const { core } = store.parseTokenWrappers(key);
-    const cleanText = core.replace(/_/g, ' ');
+    // 移除包裹层和下划线，提取核心词
+    const { core } = parseDetailedToken(key);
+    // 再次清理可能残留的括号（针对复杂嵌套或未闭合情况）
+    const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+    const cleanText = cleanCore.replace(/_/g, ' ');
     
     const url = `https://sywb.top/api/translate2?text=${encodeURIComponent(cleanText)}&sourceLang=auto&targetLang=${target}`;
     
@@ -812,23 +823,11 @@ async function autoTranslateSingle() {
 }
 
 function displayTrans(key: string): string {
-  const { core, weight, wrappers } = parseDetailedToken(key);
+  const { core, weight, wrappers, prefix, suffix } = parseDetailedToken(key);
   const tag = store.getTagByKey(core);
   const translatedCore = tag?.translation?.[selectedLang.value] ?? tag?.key ?? core;
   
-  let result = translatedCore;
-  let currentWrappers = [...wrappers];
-  
-  if (weight !== undefined && weight !== 1) {
-     const lastWrapper = currentWrappers[currentWrappers.length - 1];
-     if (lastWrapper === '()') {
-       currentWrappers.pop();
-     }
-     const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-     result = `(${result}:${wStr})`;
-  }
-  
-  return store.wrapToken(result, currentWrappers);
+  return constructToken(translatedCore, weight, wrappers, prefix, suffix);
 }
 
 function isRemoveDisabled(token: string): boolean {
@@ -1066,7 +1065,7 @@ function isRemoveDisabled(token: string): boolean {
             <div v-else class="pe-token-content">
               <span class="pe-key-compact">{{ k }}</span>
               <span class="pe-arrow-compact">→</span>
-              <span class="pe-trans-compact" :class="{ unmapped: displayTrans(k) === k }">
+              <span class="pe-trans-compact" :class="{ unmapped: isUnmapped(k) }">
                 {{ displayTrans(k) }}
               </span>
             </div>
@@ -1118,10 +1117,10 @@ function isRemoveDisabled(token: string): boolean {
               <div class="pe-token-main" @dblclick="beginEdit(i)">
                 <span class="pe-key-detail">{{ k }}</span>
                 <span class="pe-arrow-detail">→</span>
-                <span class="pe-trans-detail" :class="{ unmapped: displayTrans(k) === k }">{{ displayTrans(k) }}</span>
+                <span class="pe-trans-detail" :class="{ unmapped: isUnmapped(k) }">{{ displayTrans(k) }}</span>
               </div>
               <div class="pe-token-controls">
-                <button v-if="displayTrans(k) === k" class="pe-add-map-btn" @click="showAddMap(i)" title="添加映射">
+                <button v-if="isUnmapped(k)" class="pe-add-map-btn" @click="showAddMap(i)" title="添加映射">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
                     <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>

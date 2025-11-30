@@ -41,9 +41,9 @@
                 @change="toggleSelect(token)"
               />
             </label>
-            <div class="tp-item-key" :title="token">{{ token }}</div>
+            <div class="tp-item-key" :title="token">{{ parseDetailedToken(token).core }}</div>
             <div class="tp-item-trans">
-              <div v-if="results[token]" class="tp-trans-result">
+              <div v-if="results[token] !== undefined" class="tp-trans-result">
                 <input 
                   v-model="results[token]" 
                   class="tp-trans-input" 
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, reactive } from 'vue';
+import { parseDetailedToken } from '../stores/promptStore';
 
 const props = defineProps<{
   visible: boolean;
@@ -151,8 +152,13 @@ async function startTranslation() {
       let target = props.targetLang;
       if (target === 'zh_CN') target = 'zh';
       
-      // 预处理：移除下划线
-      const cleanTokens = batch.map(t => t.replace(/_/g, ' '));
+      // 预处理：移除包裹层和下划线，提取核心词
+      const cleanTokens = batch.map(t => {
+        const { core } = parseDetailedToken(t);
+        // 再次清理可能残留的括号（针对复杂嵌套或未闭合情况）
+        const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+        return cleanCore.replace(/_/g, ' ');
+      });
       const text = cleanTokens.join(SEPARATOR);
       
       const url = `https://sywb.top/api/translate2?text=${encodeURIComponent(text)}&sourceLang=auto&targetLang=${target}`;
@@ -165,6 +171,10 @@ async function startTranslation() {
         batch.forEach((token, idx) => {
           const trans = translations[idx] ? translations[idx].trim() : '';
           if (trans) {
+            // 保存时，如果 token 是纯词（无包裹/权重），直接保存翻译结果
+            // 如果 token 有包裹/权重，我们应该只保存核心词的映射，而不是将整个 token 作为 key
+            // 但是这里的 results 是按 token 索引的显示结果。
+            // 用户希望在这里看到的是核心词的翻译结果，而不是带符号的。
             results[token] = trans;
             cache[token] = trans;
           }
@@ -184,7 +194,8 @@ function apply() {
   const list: { key: string; trans: string }[] = [];
   for (const key of selected) {
     if (results[key]) {
-      list.push({ key, trans: results[key] });
+      const { core } = parseDetailedToken(key);
+      list.push({ key: core, trans: results[key] });
     }
   }
   emit('apply', list);

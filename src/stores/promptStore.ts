@@ -336,44 +336,9 @@ export const usePromptStore = defineStore('promptStore', {
     unifyPriorityStyle() {
       const tokens = splitTokens(this.promptText);
       const processed = tokens.map(token => {
-        const { core, weight, wrappers } = parseDetailedToken(token);
-        
-        // 重构 Token
-        let result = core;
-        
-        // 如果有权重，应用标准权重格式 (core:weight)
-        // 注意：如果原来的 wrappers 里包含用于权重的括号，需要处理
-        let currentWrappers = [...wrappers];
-        
-        if (weight !== undefined && weight !== 1) {
-           // 检查是否需要消耗一个外层括号 (如果是 () 类型)
-           // 通常 (aaa:1.2) 解析出 wrappers=['()'], core='aaa:1.2' (旧逻辑) 
-           // 新逻辑 parseDetailedToken 会解析出 wrappers=['()'], core='aaa', weight=1.2
-           // 我们需要保留非权重定义的 wrapper。
-           // 假设最内层的 () 是权重定义的一部分，我们将其消耗掉，用 (core:weight) 替代
-           
-           // 简单的策略：先生成 (core:weight)，然后应用剩余的 wrappers
-           // 但我们需要知道原来的 wrappers 是否真的包含权重的括号。
-           // parseDetailedToken 逻辑：如果解析出了 weight，且 strippedWrappers 包含 ()，则认为消耗了一个。
-           
-           // 这里简单化：如果 weight 存在，我们生成 (core:weight)。
-           // 如果 original wrappers 包含 ()，我们认为其中一个就是这个权重括号。
-           // 除非是 ((aaa:1.2)) -> wrappers=['()', '()'].
-           
-           const lastWrapper = currentWrappers[currentWrappers.length - 1];
-           if (lastWrapper === '()') {
-             currentWrappers.pop();
-           }
-           
-           // 格式化权重，最多保留2位小数
-           const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-           result = `(${result}:${wStr})`;
-        }
-        
-        // 应用剩余的 wrappers
-        return this.wrapToken(result, currentWrappers);
+        const { core, weight, wrappers, prefix, suffix } = parseDetailedToken(token);
+        return constructToken(core, weight, wrappers, prefix, suffix);
       });
-      
       this.promptText = processed.join(', ');
     },
     // 切换下划线和空格
@@ -518,25 +483,12 @@ export const usePromptStore = defineStore('promptStore', {
     },
     getTranslation(key: string, lang: LangCode): string | null {
       // 兼容包裹层：如 {aaa}、(aaa) 等，以及复杂权重 (aaa:1.2)
-      const { core, wrappers, weight } = parseDetailedToken(key);
+      const { core, wrappers, weight, prefix, suffix } = parseDetailedToken(key);
       const tag = this.getTagByKey(core);
       if (!tag) return null;
       const translatedCore = tag.translation?.[lang] ?? tag.key;
       
-      // 保持原有包裹层结构，返回被翻译后的核心
-      let result = translatedCore;
-      let currentWrappers = [...wrappers];
-      
-      if (weight !== undefined && weight !== 1) {
-         const lastWrapper = currentWrappers[currentWrappers.length - 1];
-         if (lastWrapper === '()') {
-           currentWrappers.pop();
-         }
-         const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-         result = `(${result}:${wStr})`;
-      }
-      
-      return this.wrapToken(result, currentWrappers);
+      return constructToken(translatedCore, weight, wrappers, prefix, suffix);
     },
     getSuggestions(prefix: string, limit = 8): string[] {
       const list: string[] = [];
@@ -1286,7 +1238,7 @@ function normalizeKeyForMatch(s: string): string {
 }
 
 // 解析详细 Token 信息（核心、权重、包裹层）
-export function parseDetailedToken(token: string): { core: string; weight?: number; wrappers: string[] } {
+export function parseDetailedToken(token: string): { core: string; weight?: number; wrappers: string[]; prefix?: string; suffix?: string } {
   // 1. 归一化符号
   let current = normalizeSymbols(token).trim();
   const wrappers: string[] = [];
@@ -1317,10 +1269,24 @@ export function parseDetailedToken(token: string): { core: string; weight?: numb
   }
   
   let weight: number | undefined;
+  let prefix = '';
+  let suffix = '';
+  
+  // 特殊格式处理：Prefix:Core:Suffix (例如 11:1girl:123)
+  // 简单启发式：如果符合 数字:内容:数字 格式，保留前后缀
+  const complexMatch = /^(\d+):(.+):(\d+)$/.exec(current);
+  if (complexMatch) {
+      prefix = complexMatch[1] + ':';
+      current = complexMatch[2]!.trim();
+      suffix = ':' + complexMatch[3];
+      // 此模式下暂不提取权重，而是作为固定前后缀处理
+      return { core: current, weight: undefined, wrappers, prefix, suffix };
+  }
   
   // 3. 解析核心内容里的权重
   // 标准格式 (core:weight) -> 剥离后变成 core:weight
-  const colonMatch = /^(.+):([0-9.]+)$/.exec(current);
+  // 增加 \s* 允许冒号后有空格 (core: 1.2)
+  const colonMatch = /^(.+):\s*([0-9.]+)$/.exec(current);
   if(colonMatch) {
     current = colonMatch[1]?.trim() ?? '';
     const w = parseFloat(colonMatch[2]!);
@@ -1335,13 +1301,17 @@ export function parseDetailedToken(token: string): { core: string; weight?: numb
     }
   }
   
-  return { core: current, weight, wrappers };
+  return { core: current, weight, wrappers, prefix, suffix };
 }
 
 // 重构 Token（将核心内容与权重、包裹层组合）
-export function constructToken(core: string, weight: number | undefined, wrappers: string[]): string {
+export function constructToken(core: string, weight: number | undefined, wrappers: string[], prefix = '', suffix = ''): string {
   let result = core;
   let currentWrappers = [...wrappers];
+  
+  // 应用前后缀 (如果存在)
+  if (prefix) result = prefix + result;
+  if (suffix) result = result + suffix;
   
   if (weight !== undefined && weight !== 1) {
      // 检查并消耗一个外层 () 作为权重包裹（如果存在）
@@ -1349,11 +1319,15 @@ export function constructToken(core: string, weight: number | undefined, wrapper
      // 实际上如果原 Token 是 (aaa:1.2)，解析得到 wrappers=['()']
      // 重构时如果不消耗，会变成 ((aaa:1.2))
      const lastWrapper = currentWrappers[currentWrappers.length - 1];
+     const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+     
      if (lastWrapper === '()') {
        currentWrappers.pop();
+       result = `(${result}:${wStr})`;
+     } else {
+       // 如果没有括号包裹，保持原样 (aaa:1.1)
+       result = `${result}:${wStr}`;
      }
-     const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-     result = `(${result}:${wStr})`;
   }
   
   // 应用包裹层
