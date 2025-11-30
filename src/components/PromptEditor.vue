@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
-import type { LangCode } from '../types';
+import type { LangCode, PresetFolder } from '../types';
 import NotificationToast from './NotificationToast.vue';
 import PresetDropdown from './PresetDropdown.vue';
 import TranslationPopup from './TranslationPopup.vue';
+import FolderSelector from './preset/FolderSelector.vue';
 
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
@@ -36,6 +37,7 @@ const editingValue = ref('');
 const addingMapIndex = ref<number | null>(null);
 const addingMapValue = ref('');
 const presetName = ref('');
+const selectedFolderId = ref<string>('');
 const viewMode = ref<'compact' | 'detail'>('compact');
 const showPresetDropdown = ref(false);
 const showTranslationPopup = ref(false);
@@ -63,6 +65,10 @@ function handleClickOutside(event: Event) {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+  const defaultFolder = store.presetManagement?.settings?.defaultFolder;
+  if (defaultFolder) {
+    selectedFolderId.value = defaultFolder;
+  }
 });
 
 // 清理事件监听器
@@ -76,6 +82,44 @@ const selectedLang = computed({
 });
 
 const tokens = computed(() => store.tokens);
+
+const folderTree = computed(() => {
+  const folders = store.presetFolders || [];
+  const rootFolders = folders.filter(f => !f.parentId);
+  
+  function buildTree(parentFolders: PresetFolder[]): any[] {
+    return parentFolders.map(folder => ({
+      ...folder,
+      children: buildTree(folders.filter(f => f.parentId === folder.id)),
+      presetCount: (store.extendedPresets || []).filter(p => p.folderId === folder.id).length
+    }));
+  }
+  
+  return buildTree(rootFolders);
+});
+
+const flattenedFolders = computed(() => {
+  type FlatItem = { id: string; name: string; label: string; level: number; presetCount: number; hasChildren: boolean };
+  const res: FlatItem[] = [];
+  function walk(nodes: any[], level: number, parentPath: string) {
+    nodes.forEach((node: any) => {
+      const label = parentPath ? `${parentPath} / ${node.name}` : node.name;
+      res.push({
+        id: node.id,
+        name: node.name,
+        label,
+        level,
+        presetCount: node.presetCount,
+        hasChildren: !!(node.children && node.children.length)
+      });
+      if (node.children && node.children.length) {
+        walk(node.children, level + 1, label);
+      }
+    });
+  }
+  walk(folderTree.value, 0, '');
+  return res;
+});
 
 const suggestions = ref<string[]>([]);
 const editSuggestions = ref<string[]>([]);
@@ -529,13 +573,13 @@ function savePreset() {
   const name = presetName.value.trim();
   
   // 只保存到新的扩展预设系统
-  const defaultFolder = store.presetManagement?.settings?.defaultFolder;
+  const folderId = selectedFolderId.value || store.presetManagement?.settings?.defaultFolder;
   store.createExtendedPreset({
     name: name,
     type: 'positive',
     content: store.promptText,
     description: '从编辑器快速保存',
-    folderId: defaultFolder
+    folderId: folderId
   });
   
   showNotification(`预设「${name}」已保存到预设管理`, 'success');
@@ -687,6 +731,14 @@ function isRemoveDisabled(token: string): boolean {
         </button>
       </div>
       <div class="pe-right">
+        <div class="pe-folder-select-wrapper">
+          <FolderSelector
+            v-model="selectedFolderId"
+            :tree="folderTree"
+            :flattened="flattenedFolders"
+            root-label="(默认)"
+          />
+        </div>
         <input class="pe-preset-name" placeholder="保存为预设名称" v-model="presetName" />
         <button @click="savePreset" title="保存当前提示词为预设">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1134,6 +1186,16 @@ function isRemoveDisabled(token: string): boolean {
   font-size: 0.875rem;
   transition: all 0.2s ease;
 }
+
+.pe-folder-select-wrapper {
+  width: 130px;
+}
+
+.pe-folder-select-wrapper :deep(.selector-trigger) {
+  padding: 0.45rem 0.5rem;
+  font-size: 0.85rem;
+}
+
 
 .pe-preset-name:focus {
   outline: none;
