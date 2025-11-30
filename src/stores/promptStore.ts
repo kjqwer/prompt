@@ -327,10 +327,54 @@ export const usePromptStore = defineStore('promptStore', {
       this.promptText = text;
     },
     replaceChineseComma() {
-      this.promptText = this.promptText.replace(/，/g, ',');
+      this.promptText = normalizeSymbols(this.promptText);
     },
     formatPrompt() {
       this.promptText = normalizePrompt(this.promptText);
+    },
+    // 统一优先级样式：去除无效括号，转换格式，处理乱码
+    unifyPriorityStyle() {
+      const tokens = splitTokens(this.promptText);
+      const processed = tokens.map(token => {
+        const { core, weight, wrappers } = parseDetailedToken(token);
+        
+        // 重构 Token
+        let result = core;
+        
+        // 如果有权重，应用标准权重格式 (core:weight)
+        // 注意：如果原来的 wrappers 里包含用于权重的括号，需要处理
+        let currentWrappers = [...wrappers];
+        
+        if (weight !== undefined && weight !== 1) {
+           // 检查是否需要消耗一个外层括号 (如果是 () 类型)
+           // 通常 (aaa:1.2) 解析出 wrappers=['()'], core='aaa:1.2' (旧逻辑) 
+           // 新逻辑 parseDetailedToken 会解析出 wrappers=['()'], core='aaa', weight=1.2
+           // 我们需要保留非权重定义的 wrapper。
+           // 假设最内层的 () 是权重定义的一部分，我们将其消耗掉，用 (core:weight) 替代
+           
+           // 简单的策略：先生成 (core:weight)，然后应用剩余的 wrappers
+           // 但我们需要知道原来的 wrappers 是否真的包含权重的括号。
+           // parseDetailedToken 逻辑：如果解析出了 weight，且 strippedWrappers 包含 ()，则认为消耗了一个。
+           
+           // 这里简单化：如果 weight 存在，我们生成 (core:weight)。
+           // 如果 original wrappers 包含 ()，我们认为其中一个就是这个权重括号。
+           // 除非是 ((aaa:1.2)) -> wrappers=['()', '()'].
+           
+           const lastWrapper = currentWrappers[currentWrappers.length - 1];
+           if (lastWrapper === '()') {
+             currentWrappers.pop();
+           }
+           
+           // 格式化权重，最多保留2位小数
+           const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+           result = `(${result}:${wStr})`;
+        }
+        
+        // 应用剩余的 wrappers
+        return this.wrapToken(result, currentWrappers);
+      });
+      
+      this.promptText = processed.join(', ');
     },
     // 切换下划线和空格
     toggleUnderscoreSpace() {
@@ -473,13 +517,26 @@ export const usePromptStore = defineStore('promptStore', {
       return tagNormIndex.get(target) || null;
     },
     getTranslation(key: string, lang: LangCode): string | null {
-      // 兼容包裹层：如 {aaa}、(aaa) 等
-      const { core, wrappers } = this.parseTokenWrappers(key);
+      // 兼容包裹层：如 {aaa}、(aaa) 等，以及复杂权重 (aaa:1.2)
+      const { core, wrappers, weight } = parseDetailedToken(key);
       const tag = this.getTagByKey(core);
       if (!tag) return null;
       const translatedCore = tag.translation?.[lang] ?? tag.key;
+      
       // 保持原有包裹层结构，返回被翻译后的核心
-      return this.wrapToken(translatedCore, wrappers);
+      let result = translatedCore;
+      let currentWrappers = [...wrappers];
+      
+      if (weight !== undefined && weight !== 1) {
+         const lastWrapper = currentWrappers[currentWrappers.length - 1];
+         if (lastWrapper === '()') {
+           currentWrappers.pop();
+         }
+         const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+         result = `(${result}:${wStr})`;
+      }
+      
+      return this.wrapToken(result, currentWrappers);
     },
     getSuggestions(prefix: string, limit = 8): string[] {
       const list: string[] = [];
@@ -1161,20 +1218,152 @@ export const usePromptStore = defineStore('promptStore', {
   },
 });
 // —— 工具方法 ——
-function splitTokens(text: string): string[] {
+
+export function normalizeSymbols(text: string): string {
   return text
-    .split(/[，,]/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+    .replace(/，/g, ',')
+    .replace(/。/g, '.')
+    .replace(/：/g, ':')
+    .replace(/；/g, ';')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/【/g, '[')
+    .replace(/】/g, ']')
+    .replace(/《/g, '<')
+    .replace(/》/g, '>')
+    .replace(/“/g, '"')
+    .replace(/”/g, '"')
+    .replace(/\u3000/g, ' ');
 }
-function normalizeToken(t: string): string {
-  return t.trim();
+
+export function splitTokens(text: string): string[] {
+  // 先归一化符号，确保括号匹配正确
+  const normalized = normalizeSymbols(text);
+  const result: string[] = [];
+  let current = '';
+  let depth = 0;
+  
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized[i];
+    if (char && ['(', '[', '{', '<'].includes(char)) {
+      depth++;
+    } else if (char && [')', ']', '}', '>'].includes(char)) {
+      depth = Math.max(0, depth - 1);
+    }
+    
+    // 只有在顶层（depth===0）才分割逗号
+    if ((char === ',' || char === '\n') && depth === 0) {
+      if (current.trim()) {
+        result.push(current.trim());
+      }
+      current = '';
+    } else {
+      // 换行符转空格
+      if (char === '\n') {
+         current += ' ';
+      } else {
+         current += char;
+      }
+    }
+  }
+  if (current.trim()) {
+    result.push(current.trim());
+  }
+  return result;
 }
-function normalizePrompt(text: string): string {
-  return splitTokens(text).join(', ');
+
+export function normalizeToken(t: string): string {
+  return t.trim().replace(/\s+/g, ' ');
+}
+
+export function normalizePrompt(text: string): string {
+  return splitTokens(text).map(normalizeToken).join(', ');
 }
 
 // 归一化用于匹配的 key：统一大小写与下划线/空格
 function normalizeKeyForMatch(s: string): string {
   return s.trim().toLowerCase().replace(/_/g, ' ');
+}
+
+// 解析详细 Token 信息（核心、权重、包裹层）
+export function parseDetailedToken(token: string): { core: string; weight?: number; wrappers: string[] } {
+  // 1. 归一化符号
+  let current = normalizeSymbols(token).trim();
+  const wrappers: string[] = [];
+  
+  const wrapperPairs = [
+    ['{}', '{', '}'],
+    ['()', '(', ')'],
+    ['[]', '[', ']'],
+    ['<>', '<', '>']
+  ];
+
+  const hasWrapper = (s: string) => {
+    for(const [type, start, end] of wrapperPairs) {
+      if(s && s.startsWith(start!) && s.endsWith(end!)) return { type, start: start!, end: end! };
+    }
+    return null;
+  };
+
+  // 2. 剥离外层包裹
+  while(true) {
+    const w = hasWrapper(current);
+    if(w) {
+      if (w.type) wrappers.push(w.type);
+      current = current.slice(w.start.length, -w.end.length).trim();
+    } else {
+      break;
+    }
+  }
+  
+  let weight: number | undefined;
+  
+  // 3. 解析核心内容里的权重
+  // 标准格式 (core:weight) -> 剥离后变成 core:weight
+  const colonMatch = /^(.+):([0-9.]+)$/.exec(current);
+  if(colonMatch) {
+    current = colonMatch[1]?.trim() ?? '';
+    const w = parseFloat(colonMatch[2]!);
+    if (!isNaN(w)) weight = w;
+  } else {
+    // 自定义格式 (weight :: core) -> 剥离后变成 weight :: core
+    const customMatch = /^([0-9.]+)\s*::\s*(.+)$/.exec(current);
+    if(customMatch) {
+      const w = parseFloat(customMatch[1]!);
+      if (!isNaN(w)) weight = w;
+      current = customMatch[2]?.trim() ?? current;
+    }
+  }
+  
+  return { core: current, weight, wrappers };
+}
+
+// 重构 Token（将核心内容与权重、包裹层组合）
+export function constructToken(core: string, weight: number | undefined, wrappers: string[]): string {
+  let result = core;
+  let currentWrappers = [...wrappers];
+  
+  if (weight !== undefined && weight !== 1) {
+     // 检查并消耗一个外层 () 作为权重包裹（如果存在）
+     // 注意：这里采用简化策略，假设最内层的 () 是为了包裹权重而存在的
+     // 实际上如果原 Token 是 (aaa:1.2)，解析得到 wrappers=['()']
+     // 重构时如果不消耗，会变成 ((aaa:1.2))
+     const lastWrapper = currentWrappers[currentWrappers.length - 1];
+     if (lastWrapper === '()') {
+       currentWrappers.pop();
+     }
+     const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+     result = `(${result}:${wStr})`;
+  }
+  
+  // 应用包裹层
+  for (let i = currentWrappers.length - 1; i >= 0; i--) {
+    const w = currentWrappers[i];
+    if (!w) continue;
+    const start = w.slice(0, w.length / 2);
+    const end = w.slice(w.length / 2);
+    result = start + result + end;
+  }
+  
+  return result;
 }

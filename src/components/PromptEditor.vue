@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, nextTick, watch } from 'vue';
-import { usePromptStore } from '../stores/promptStore';
+import { usePromptStore, splitTokens, normalizeSymbols, parseDetailedToken, constructToken } from '../stores/promptStore';
 import type { LangCode, PresetFolder } from '../types';
 import NotificationToast from './NotificationToast.vue';
 import PresetDropdown from './PresetDropdown.vue';
@@ -135,10 +135,12 @@ function currentEditEl(): HTMLInputElement | null {
 const priorityStyle = ref<'{}' | '()' | '[]' | '<>' | 'suffix'>('{}');
 const priorityStep = ref(1);
 function splitTokensLocal(txt: string): string[] {
-  return txt.split(/[，,]/).map(s => s.trim()).filter(s => s.length > 0);
+  return splitTokens(txt);
 }
-function normalizeToken(t: string): string { return t.trim(); }
-function normalizePromptLocal(txt: string): string { return splitTokensLocal(txt).join(', '); }
+function normalizeToken(t: string): string { return t.trim().replace(/\s+/g, ' '); }
+function normalizePromptLocal(txt: string): string { 
+  return splitTokens(txt).map(t => t.replace(/\s+/g, ' ')).join(', '); 
+}
 function applyFullPrompt(newText: string) {
   const el = inputEl.value;
   if (!el) { text.value = newText; return; }
@@ -207,7 +209,10 @@ function updateSuggestions() {
   const rightCandidates = [rightCommaEn, rightCommaCn].filter(i => i !== -1);
   const right = rightCandidates.length ? Math.min(...rightCandidates) : txt.length;
   const segment = txt.slice(left < 0 ? 0 : left + 1, right).trim();
-  suggestions.value = store.getSuggestions(segment, 8);
+  const { core } = parseDetailedToken(segment);
+  // 去除 core 前后可能残留的符号（针对未闭合情况，如 "(aa" -> "aa"）
+  const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+  suggestions.value = store.getSuggestions(cleanCore, 8);
 }
 
 function updateEditSuggestions() {
@@ -221,7 +226,9 @@ function updateEditSuggestions() {
   const before = val.slice(0, pos);
   const match = before.match(/[^，,]*$/);
   const prefix = (match ? match[0] : before).trim();
-  editSuggestions.value = store.getSuggestions(prefix, 8);
+  const { core } = parseDetailedToken(prefix);
+  const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+  editSuggestions.value = store.getSuggestions(cleanCore, 8);
 }
 
 // 计算左侧输入（textarea）基于光标位置的片段替换范围（修剪前后空格）
@@ -275,21 +282,37 @@ async function onKeyDown(e: KeyboardEvent) {
     const el = inputEl.value;
     if (!el) return;
     const pos = el.selectionStart ?? store.promptText.length;
-    const before = store.promptText.slice(0, pos);
-    const match = before.match(/[^，,]*$/);
-    const prefix = (match ? match[0] : '').trim();
-  const { start, end } = getTextSegmentBounds(store.promptText, pos);
-  const list = store.getSuggestions(prefix, 8);
-  if (list.length > 0) {
-    e.preventDefault();
-    const s = list[0];
-    if (!s) return;
-    // 使用原生插入或回退方案，确保撤回可用
-    applyTextReplacement(el, start, end, s);
-    await nextTick();
-    updateSuggestions();
+    const { start, end } = getTextSegmentBounds(store.promptText, pos);
+    const segment = store.promptText.slice(start, end);
+    const { core } = parseDetailedToken(segment);
+    const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+    
+    const list = store.getSuggestions(cleanCore, 8);
+    if (list.length > 0) {
+      e.preventDefault();
+      const s = list[0];
+      if (!s) return;
+      
+      // 智能替换：保留包裹层和权重
+      const { weight, wrappers } = parseDetailedToken(segment);
+      // 即使 parseDetailedToken 没解析出 wrapper (如未闭合情况)，我们也尝试保留非 core 部分？
+      // 目前策略：如果 parseDetailedToken 能解析出结构，则完美重构。
+      // 如果是未闭合如 "(aa"，wrappers 为空，core 为 "(aa"，cleanCore 为 "aa"。
+      // 此时如果直接用 constructToken("aaa", undefined, []) -> "aaa"，会丢失 "("。
+      // 针对未闭合情况的特殊处理：
+      let newToken = '';
+      if (wrappers.length === 0 && weight === undefined && segment !== cleanCore) {
+         // 简单替换核心部分
+         newToken = segment.replace(cleanCore, s);
+      } else {
+         newToken = constructToken(s, weight, wrappers);
+      }
+
+      applyTextReplacement(el, start, end, newToken);
+      await nextTick();
+      updateSuggestions();
+    }
   }
-}
 }
 
 async function copyLeft() { 
@@ -300,26 +323,82 @@ async function copyLeft() {
     showNotification('复制失败，请手动复制', 'error');
   }
 }
-function replaceCnComma() { applyFullPrompt(text.value.replace(/，/g, ',')); }
+function replaceCnComma() { applyFullPrompt(normalizeSymbols(text.value)); }
 function formatPrompt() { applyFullPrompt(normalizePromptLocal(text.value)); }
+
+function unifyPriorityStyle() {
+  const tokens = splitTokens(text.value);
+  const processed = tokens.map(token => {
+    const { core, weight, wrappers } = parseDetailedToken(token);
+    let result = core;
+    let currentWrappers = [...wrappers];
+    
+    if (weight !== undefined && weight !== 1) {
+       const lastWrapper = currentWrappers[currentWrappers.length - 1];
+       if (lastWrapper === '()') {
+         currentWrappers.pop();
+       }
+       const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+       result = `(${result}:${wStr})`;
+    }
+    
+    return store.wrapToken(result, currentWrappers);
+  });
+  applyFullPrompt(processed.join(', '));
+  showNotification('已统一优先级样式', 'success');
+}
 
 // 新增功能方法
 function toggleUnderscoreSpace() { 
-  const tokens = splitTokensLocal(text.value);
-  const newTokens = tokens.map(token => {
-    const { core, wrappers } = store.parseTokenWrappers(token);
-    let newCore;
-    if (core.includes('_')) {
-      newCore = core.replace(/_/g, ' ');
-    } else if (core.includes(' ')) {
-      newCore = core.replace(/ /g, '_');
-    } else {
-      newCore = core;
+  const tokens = splitTokens(text.value);
+  
+  // 1. 统计全局倾向
+  let spaceCount = 0;
+  let underscoreCount = 0;
+  
+  // 预解析所有 Token
+  const parsedList = tokens.map(t => parseDetailedToken(t));
+  
+  parsedList.forEach(({ core }) => {
+    for (const char of core) {
+      if (char === ' ') spaceCount++;
+      if (char === '_') underscoreCount++;
     }
-    return store.wrapToken(newCore, wrappers);
   });
+
+  // 2. 确定目标格式
+  // 逻辑：统一成“非优势”的一方。
+  // 如果下划线更多（或相等），则统一变成空格（通常是为了可读性）。
+  // 如果空格更多，则统一变成下划线（通常是为了作为 Tag 使用）。
+  const targetIsUnderscore = spaceCount > underscoreCount;
+
+  const newTokens = parsedList.map(({ core, weight, wrappers }) => {
+    let newCore = core;
+    
+    if (targetIsUnderscore) {
+      newCore = newCore.replace(/ /g, '_');
+    } else {
+      newCore = newCore.replace(/_/g, ' ');
+    }
+    
+    // 重构 Token (保持权重和包裹层)
+    let result = newCore;
+    let currentWrappers = [...wrappers];
+    
+    if (weight !== undefined && weight !== 1) {
+       const lastWrapper = currentWrappers[currentWrappers.length - 1];
+       if (lastWrapper === '()') {
+         currentWrappers.pop();
+       }
+       const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+       result = `(${result}:${wStr})`;
+    }
+    
+    return store.wrapToken(result, currentWrappers);
+  });
+
   applyFullPrompt(newTokens.join(', ')); 
-  showNotification('已切换下划线/空格格式', 'success');
+  showNotification(targetIsUnderscore ? '已统一为下划线格式' : '已统一为空格格式', 'success');
 }
 
 function addWrapperToToken(index: number) { 
@@ -623,8 +702,21 @@ async function applySuggestion(s: string) {
   el.focus();
   const pos = el.selectionStart ?? store.promptText.length;
   const { start, end } = getTextSegmentBounds(store.promptText, pos);
-  // 使用原生插入或回退方式替换片段，确保撤回可用
-  applyTextReplacement(el, start, end, s);
+  
+  // 智能替换逻辑
+  const segment = store.promptText.slice(start, end);
+  const { core, weight, wrappers } = parseDetailedToken(segment);
+  const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+  
+  let newToken = '';
+  if (wrappers.length === 0 && weight === undefined && segment !== cleanCore) {
+     // 简单替换核心部分 (针对未闭合情况)
+     newToken = segment.replace(cleanCore, s);
+  } else {
+     newToken = constructToken(s, weight, wrappers);
+  }
+
+  applyTextReplacement(el, start, end, newToken);
   await nextTick();
   updateSuggestions();
 }
@@ -653,9 +745,31 @@ function applyEditSuggestion(s: string) {
   // 保持焦点在编辑输入上
   el.focus();
   const val = editingValue.value || '';
-  // 直接替换整个输入为建议，保证撤回可用
-  applyTextReplacement(el, 0, val.length, s);
-  updateEditSuggestions();
+  const pos = el.selectionStart ?? val.length;
+  
+  // 智能替换逻辑 (Compact Mode)
+  const { core, weight, wrappers } = parseDetailedToken(val);
+  const cleanCore = core.replace(/^[\(\[\{<]+/, '').replace(/[\)\]\}>]+$/, '');
+  
+  let newVal = '';
+  if (wrappers.length === 0 && weight === undefined && val !== cleanCore) {
+      // 简单替换核心部分 (针对未闭合情况)
+      newVal = val.replace(cleanCore, s);
+  } else {
+      newVal = constructToken(s, weight, wrappers);
+  }
+
+  editingValue.value = newVal;
+  nextTick(() => {
+    // 光标移动到插入词后
+    const newCoreIndex = newVal.indexOf(s);
+    if (newCoreIndex !== -1) {
+      el.setSelectionRange(newCoreIndex + s.length, newCoreIndex + s.length);
+    } else {
+      el.setSelectionRange(newVal.length, newVal.length);
+    }
+    updateEditSuggestions();
+  });
 }
 
 const unmappedTokens = computed(() => {
@@ -698,13 +812,23 @@ async function autoTranslateSingle() {
 }
 
 function displayTrans(key: string): string {
-  const { core, wrappers } = store.parseTokenWrappers(key);
-  const m = core.match(/:(\d+(?:\.\d+)?)$/);
-  const base = m ? core.slice(0, core.lastIndexOf(':')) : core;
-  const suffix = m ? ':' + m[1]! : '';
-  const tag = store.getTagByKey(base);
-  const translatedCore = tag?.translation?.[selectedLang.value] ?? tag?.key ?? base;
-  return store.wrapToken(translatedCore + suffix, wrappers);
+  const { core, weight, wrappers } = parseDetailedToken(key);
+  const tag = store.getTagByKey(core);
+  const translatedCore = tag?.translation?.[selectedLang.value] ?? tag?.key ?? core;
+  
+  let result = translatedCore;
+  let currentWrappers = [...wrappers];
+  
+  if (weight !== undefined && weight !== 1) {
+     const lastWrapper = currentWrappers[currentWrappers.length - 1];
+     if (lastWrapper === '()') {
+       currentWrappers.pop();
+     }
+     const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+     result = `(${result}:${wStr})`;
+  }
+  
+  return store.wrapToken(result, currentWrappers);
 }
 
 function isRemoveDisabled(token: string): boolean {
@@ -796,14 +920,14 @@ function isRemoveDisabled(token: string): boolean {
           placeholder="例如：1girl, aaa, bbb, ccc"
         ></textarea>
         <div class="pe-input-actions">
-          <button @click="replaceCnComma" title="将中文逗号替换为英文逗号">
+          <button @click="replaceCnComma" title="将中文逗号、括号等替换为英文符号">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/>
               <polyline points="14,2 14,8 20,8" stroke="currentColor" stroke-width="2"/>
               <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/>
               <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/>
             </svg>
-            替换中文逗号
+            归一化符号
           </button>
           <button @click="formatPrompt" title="格式化提示词为标准格式">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -811,7 +935,15 @@ function isRemoveDisabled(token: string): boolean {
               <line x1="9" y1="20" x2="15" y2="20" stroke="currentColor" stroke-width="2"/>
               <line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" stroke-width="2"/>
             </svg>
-            格式化提示词
+            格式化
+          </button>
+          <button @click="unifyPriorityStyle" title="统一优先级样式 (core:weight)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+               <path d="M8 12h8" stroke="currentColor" stroke-width="2"/>
+               <path d="M12 8v8" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            统一优先级
           </button>
           <button @click="toggleUnderscoreSpace" title="切换下划线和空格格式">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
