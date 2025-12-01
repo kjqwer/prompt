@@ -35,28 +35,21 @@ function displayTrans(tag: PromptTag) {
   <div class="pqa-root">
     <!-- Categories -->
     <div class="pqa-categories">
-      <button 
-        v-for="(c, i) in categories" 
-        :key="c.id"
-        class="pqa-tab"
-        :class="{ active: i === store.selectedCategoryIndex }"
-        @click="selectCategory(i)"
-      >
+      <button v-for="(c, i) in categories" :key="c.id" class="pqa-tab"
+        :class="{ active: i === store.selectedCategoryIndex }" @click="selectCategory(i)">
         {{ c.name }}
       </button>
     </div>
 
     <!-- Groups -->
     <div class="pqa-groups" v-if="currentCategory?.groups.length">
-      <button 
-        v-for="(g, i) in currentCategory.groups" 
-        :key="g.id"
-        class="pqa-group-tab"
-        :class="{ active: i === store.selectedGroupIndex }"
-        :style="{ '--group-color': g.color || 'var(--color-text-secondary)' }"
-        @click="selectGroup(i)"
-        @mousedown.prevent
-      >
+      <button v-for="(g, i) in currentCategory.groups" :key="g.id" class="pqa-group-tab"
+        :class="{ active: i === store.selectedGroupIndex }" :style="{
+          '--group-color':
+            g.color && g.color !== 'rgba(0, 0, 0, .0)'
+              ? g.color
+              : 'var(--color-text-secondary)'
+        }" @click="selectGroup(i)" @mousedown.prevent>
         <span class="pqa-dot"></span>
         {{ g.name }}
       </button>
@@ -64,14 +57,8 @@ function displayTrans(tag: PromptTag) {
 
     <!-- Tags -->
     <div class="pqa-tags">
-      <button 
-        v-for="tag in filteredTags" 
-        :key="tag.key"
-        class="pqa-tag"
-        @click="onTagClick(tag)"
-        @mousedown.prevent
-        :title="tag.key"
-      >
+      <button v-for="tag in filteredTags" :key="tag.key" class="pqa-tag" @click="onTagClick(tag)" @mousedown.prevent
+        :title="tag.key">
         <span class="pqa-tag-text">{{ displayTrans(tag) }}</span>
         <span class="pqa-tag-sub" v-if="displayTrans(tag) !== tag.key">{{ tag.key }}</span>
       </button>
@@ -106,10 +93,12 @@ function displayTrans(tag: PromptTag) {
 .pqa-categories::-webkit-scrollbar {
   height: 8px;
 }
+
 .pqa-categories::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 4px;
 }
+
 .pqa-categories::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-tertiary);
 }
@@ -148,10 +137,12 @@ function displayTrans(tag: PromptTag) {
 .pqa-groups::-webkit-scrollbar {
   height: 8px;
 }
+
 .pqa-groups::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 4px;
 }
+
 .pqa-groups::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-tertiary);
 }

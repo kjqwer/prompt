@@ -17,7 +17,7 @@
             共 {{ tokens.length }} 个未映射词条
           </div>
           <div class="tp-actions">
-            <button @click="startTranslation" :disabled="loading" class="tp-btn primary">
+            <button @click="startTranslation" :disabled="loading || tokens.length === 0" class="tp-btn primary">
               {{ loading ? '翻译中...' : '开始翻译' }}
             </button>
           </div>
@@ -26,13 +26,17 @@
         <div class="tp-list">
           <div class="tp-list-header">
             <label class="tp-checkbox-wrapper">
-              <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" />
+              <input type="checkbox" :checked="isAllSelected" @change="toggleSelectAll" :disabled="tokens.length === 0" />
               <span>全选</span>
             </label>
             <span>原词</span>
             <span>翻译结果 (可直接编辑)</span>
           </div>
           
+          <div v-if="tokens.length === 0" class="tp-empty-state">
+            暂无未映射词条
+          </div>
+
           <div v-for="token in tokens" :key="token" class="tp-item" :class="{ selected: selected.has(token) }">
             <label class="tp-checkbox-wrapper">
               <input 
@@ -331,6 +335,16 @@ function apply() {
   background-color: var(--color-bg-primary);
   display: flex;
   flex-direction: column;
+}
+
+.tp-empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+  padding: 2rem;
 }
 
 /* Scrollbar styling */

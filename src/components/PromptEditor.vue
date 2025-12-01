@@ -1120,7 +1120,6 @@ function isRemoveDisabled(token: string): boolean {
           <div class="pe-title-group">
             <span>提示词映射（双击修改）</span>
             <button 
-              v-if="unmappedTokens.length > 0" 
               class="pe-auto-trans-btn" 
               @click="() => { translationTargetToken = null; showTranslationPopup = true; }"
               title="自动翻译未映射词条"
