@@ -6,6 +6,7 @@ import NotificationToast from './NotificationToast.vue';
 import PresetDropdown from './PresetDropdown.vue';
 import TranslationPopup from './TranslationPopup.vue';
 import FolderSelector from './preset/FolderSelector.vue';
+import PromptQuickAdd from './PromptQuickAdd.vue';
 
 const store = usePromptStore();
 const draggingIndex = ref<number | null>(null);
@@ -77,6 +78,7 @@ onMounted(() => {
   if (defaultFolder) {
     selectedFolderId.value = defaultFolder;
   }
+  store.searchQuery = ''; // Reset search query to ensure all tags are shown
 });
 
 // 清理事件监听器
@@ -285,6 +287,40 @@ function applyTextReplacement(
     (el as any).value = value.slice(0, start) + text + value.slice(end);
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
+}
+
+
+function handleAddTag(tag: string) {
+  const el = inputEl.value;
+  if (!el) {
+    store.setPromptTextRaw(store.promptText ? store.promptText + ', ' + tag : tag);
+    return;
+  }
+  
+  el.focus(); // Ensure focus for undo/redo support
+
+  const start = el.selectionStart ?? store.promptText.length;
+  const end = el.selectionEnd ?? start;
+  const text = el.value;
+  
+  let prefix = '';
+  // 如果前面有内容且不是逗号结尾，加逗号
+  if (start > 0) {
+     const prev = text.slice(0, start).trim();
+     if (prev.length > 0 && !/[,，]$/.test(prev)) {
+       prefix = ', ';
+     } else if (prev.length > 0 && /[,，]$/.test(prev) && text[start-1] !== ' ') {
+       // 如果是逗号结尾但没空格，加空格
+       prefix = ' ';
+     }
+  }
+  
+  const toInsert = prefix + tag;
+  applyTextReplacement(el, start, end, toInsert);
+  
+  nextTick(() => {
+    el.focus();
+  });
 }
 
 async function onKeyDown(e: KeyboardEvent) {
@@ -991,6 +1027,7 @@ function isRemoveDisabled(token: string): boolean {
             @click="applySuggestion(s)"
           >{{ s }}</li>
         </ul>
+        <PromptQuickAdd @add-tag="handleAddTag" />
       </section>
       
       <section class="pe-right-pane">
@@ -1507,7 +1544,15 @@ function isRemoveDisabled(token: string): boolean {
   margin: 0 auto;
 }
 
-.pe-left-pane, .pe-right-pane {
+.pe-left-pane {
+  padding: 1.5rem;
+  background-color: var(--color-bg-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pe-right-pane {
   padding: 1.5rem;
   background-color: var(--color-bg-primary);
   overflow: auto;
