@@ -41,6 +41,14 @@ const selectedFolderId = ref<string>('');
 const viewMode = ref<'compact' | 'detail'>('compact');
 const showPresetDropdown = ref(false);
 const showTranslationPopup = ref(false);
+const translationTargetToken = ref<string | null>(null);
+
+const translationTokens = computed(() => {
+  if (translationTargetToken.value) {
+    return [translationTargetToken.value];
+  }
+  return unmappedTokens.value;
+});
 const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ 
   message: '', 
   type: 'info', 
@@ -623,8 +631,10 @@ function commitEdit() {
 function cancelEdit() { editingIndex.value = null; }
 
 function showAddMap(i: number) {
-  addingMapIndex.value = i; addingMapValue.value = '';
-  editingIndex.value = null;
+  const token = tokens.value[i];
+  if (!token) return;
+  translationTargetToken.value = token;
+  showTranslationPopup.value = true;
 }
 function commitAddMap() {
   if (addingMapIndex.value == null) return;
@@ -990,7 +1000,7 @@ function isRemoveDisabled(token: string): boolean {
             <button 
               v-if="unmappedTokens.length > 0" 
               class="pe-auto-trans-btn" 
-              @click="showTranslationPopup = true"
+              @click="() => { translationTargetToken = null; showTranslationPopup = true; }"
               title="自动翻译未映射词条"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1184,23 +1194,7 @@ function isRemoveDisabled(token: string): boolean {
               </div>
             </div>
             
-            <div v-if="addingMapIndex === i" class="pe-add-panel">
-              <input v-model="addingMapValue" :placeholder="`请输入 ${selectedLang} 的翻译`" @keyup.enter="commitAddMap" />
-              <div class="pe-add-actions">
-                <button @click="autoTranslateSingle" class="pe-trans-btn" title="自动翻译">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M5 8l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M4 14l6-6 2-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 5h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M7 2v3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M22 22l-5-13-5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M14.2 18h5.6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-                <button @click="commitAddMap" class="pe-confirm-btn">添加</button>
-                <button @click="() => { addingMapIndex = null; addingMapValue = ''; }" class="pe-cancel-btn">取消</button>
-              </div>
-            </div>
+
           </div>
         </div>
         </div>
@@ -1210,9 +1204,9 @@ function isRemoveDisabled(token: string): boolean {
     <!-- 翻译弹窗 -->
     <TranslationPopup
       :visible="showTranslationPopup"
-      :tokens="unmappedTokens"
+      :tokens="translationTokens"
       :target-lang="selectedLang"
-      @close="showTranslationPopup = false"
+      @close="() => { showTranslationPopup = false; translationTargetToken = null; }"
       @apply="handleApplyTranslation"
     />
 

@@ -30,7 +30,7 @@
               <span>全选</span>
             </label>
             <span>原词</span>
-            <span>翻译结果</span>
+            <span>翻译结果 (可直接编辑)</span>
           </div>
           
           <div v-for="token in tokens" :key="token" class="tp-item" :class="{ selected: selected.has(token) }">
@@ -43,17 +43,21 @@
             </label>
             <div class="tp-item-key" :title="token">{{ parseDetailedToken(token).core }}</div>
             <div class="tp-item-trans">
-              <div v-if="results[token] !== undefined" class="tp-trans-result">
+              <div class="tp-trans-wrapper">
                 <input 
                   v-model="results[token]" 
                   class="tp-trans-input" 
-                  placeholder="翻译结果"
+                  :class="{ 'has-error': errors[token] }"
+                  placeholder="待翻译"
+                  :disabled="translating.has(token)"
                 />
+                <div v-if="translating.has(token)" class="tp-input-spinner">
+                  <span class="spinner"></span>
+                </div>
               </div>
-              <div v-else-if="translating.has(token)" class="tp-status loading">
-                <span class="spinner"></span>
+              <div v-if="errors[token]" class="tp-error-msg" :title="errors[token]">
+                {{ errors[token] }}
               </div>
-              <div v-else class="tp-status pending">待翻译</div>
             </div>
           </div>
         </div>
@@ -85,6 +89,7 @@ const emit = defineEmits<{
 }>();
 
 const results = reactive<Record<string, string>>({});
+const errors = reactive<Record<string, string>>({});
 const translating = reactive(new Set<string>());
 const selected = reactive(new Set<string>());
 const loading = ref(false);
@@ -96,7 +101,16 @@ watch(() => props.visible, (val) => {
   if (val) {
     // 初始化选中状态
     selected.clear();
-    props.tokens.forEach(t => selected.add(t));
+    props.tokens.forEach(t => {
+      selected.add(t);
+      // 确保每个 token 都有对应的 result 条目，方便绑定 v-model
+      if (results[t] === undefined) {
+        results[t] = '';
+      }
+      // 清除旧错误
+      delete errors[t];
+    });
+    
     // 检查缓存
     props.tokens.forEach(t => {
       if (cache[t]) {
@@ -133,9 +147,15 @@ function close() {
 
 async function startTranslation() {
   if (loading.value) return;
+  
+  // 只翻译选中的项目
+  const toTranslate = Array.from(selected);
+  if (toTranslate.length === 0) return;
+
   loading.value = true;
   
-  const toTranslate = props.tokens.filter(t => !results[t]);
+  // 清除之前的错误
+  toTranslate.forEach(t => delete errors[t]);
   
   // 使用换行符作为分隔符，大多数翻译 API 能正确处理多行文本
   const SEPARATOR = '\n';
@@ -171,17 +191,21 @@ async function startTranslation() {
         batch.forEach((token, idx) => {
           const trans = translations[idx] ? translations[idx].trim() : '';
           if (trans) {
-            // 保存时，如果 token 是纯词（无包裹/权重），直接保存翻译结果
-            // 如果 token 有包裹/权重，我们应该只保存核心词的映射，而不是将整个 token 作为 key
-            // 但是这里的 results 是按 token 索引的显示结果。
-            // 用户希望在这里看到的是核心词的翻译结果，而不是带符号的。
             results[token] = trans;
             cache[token] = trans;
+          } else {
+             // 翻译结果为空
+             // errors[token] = '翻译为空';
           }
         });
+      } else {
+        throw new Error(data.message || '翻译失败');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Batch translation failed', e);
+      batch.forEach(token => {
+        errors[token] = '翻译失败';
+      });
     } finally {
       batch.forEach(t => translating.delete(t));
     }
@@ -193,7 +217,7 @@ async function startTranslation() {
 function apply() {
   const list: { key: string; trans: string }[] = [];
   for (const key of selected) {
-    if (results[key]) {
+    if (results[key] && results[key].trim()) {
       const { core } = parseDetailedToken(key);
       list.push({ key: core, trans: results[key] });
     }
@@ -497,5 +521,44 @@ function apply() {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.tp-trans-wrapper {
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.tp-input-spinner {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.tp-input-spinner .spinner {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+.tp-trans-input.has-error {
+  border-color: var(--color-error);
+  background-color: #fff1f2;
+}
+
+.tp-error-msg {
+  color: var(--color-error);
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100px;
 }
 </style>
