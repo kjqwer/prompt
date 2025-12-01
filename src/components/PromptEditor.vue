@@ -299,27 +299,112 @@ function handleAddTag(tag: string) {
   
   el.focus(); // Ensure focus for undo/redo support
 
-  const start = el.selectionStart ?? store.promptText.length;
-  const end = el.selectionEnd ?? start;
+  let start = el.selectionStart ?? store.promptText.length;
   const text = el.value;
-  
-  let prefix = '';
-  // 如果前面有内容且不是逗号结尾，加逗号
-  if (start > 0) {
-     const prev = text.slice(0, start).trim();
-     if (prev.length > 0 && !/[,，]$/.test(prev)) {
-       prefix = ', ';
-     } else if (prev.length > 0 && /[,，]$/.test(prev) && text[start-1] !== ' ') {
-       // 如果是逗号结尾但没空格，加空格
-       prefix = ' ';
-     }
+  const len = text.length;
+
+  // 智能定位：如果在词条中间，判断是前半还是后半
+  // 1. 找到当前光标所在的词条范围 (current token boundaries)
+  // 向左找逗号或开头
+  let tokenStart = start;
+  while (tokenStart > 0 && !/[,，]/.test(text[tokenStart - 1] || '')) {
+    tokenStart--;
   }
+  // 向右找逗号或结尾
+  let tokenEnd = start;
+  while (tokenEnd < len && !/[,，]/.test(text[tokenEnd] || '')) {
+    tokenEnd++;
+  }
+
+  // 当前光标所在的词条内容（去除前后空格，但保留原始位置信息）
+  const rawToken = text.slice(tokenStart, tokenEnd);
+  const trimmedToken = rawToken.trim();
   
-  const toInsert = prefix + tag;
-  applyTextReplacement(el, start, end, toInsert);
+  // 如果是在词条内部（非空词条）
+  if (trimmedToken.length > 0) {
+    const tokenCenter = tokenStart + rawToken.length / 2;
+    if (start < tokenCenter) {
+      // 在前半部分 -> 插入到该词条前面
+      start = tokenStart;
+    } else {
+      // 在后半部分 -> 插入到该词条后面
+      start = tokenEnd;
+    }
+  } else {
+     // 空词条或光标在逗号旁，保持原位，但在逗号后可能需要调整
+  }
+
+  // 插入逻辑：根据 start 位置前后字符决定逗号和空格
+  let prefix = '';
+  let suffix = '';
+  
+  // 检查前文
+  if (start > 0) {
+    const prevChar = text[start - 1];
+    // 如果前一个字符不是逗号也不是空格（即紧贴着字），或者虽然是逗号但没空格，根据情况加
+    // 简单策略：
+    // 1. 如果前面是非空字符且不是逗号 -> 加 ", "
+    // 2. 如果前面是逗号 -> 加 " "
+    // 3. 如果前面是空格 -> 检查空格前面是不是逗号，是则不动，不是则加 ", "
+    
+    // 获取前面的有效内容（忽略紧挨着的空格）
+    const prevText = text.slice(0, start);
+    if (/[^,，\s]$/.test(prevText)) {
+        prefix = ', ';
+    } else if (/[,，]$/.test(prevText)) {
+        prefix = ' ';
+    } else if (/[,，]\s+$/.test(prevText)) {
+        // 已经是 ", " 格式，无需前缀
+        prefix = '';
+    } else if (/\s+$/.test(prevText)) {
+        // 只是空格，前面没有逗号 -> 加 ", "
+        // 注意：如果整段都是空格（start之前），那其实就是开头，不需要逗号
+        if (prevText.trim().length > 0) {
+            // 将空格替换为 ", " ? 或者直接追加
+            // 这里为了不破坏原有空格结构，简单处理：
+            // 如果前面是 "abc " -> 变成 "abc, tag"
+            // 回退光标吃掉空格？不，直接补逗号和空格
+             // 修正：如果前面是空格，我们应该判断这个空格是不是分隔符的一部分
+             // 简单起见，如果前导是空格，且再前面不是逗号，那说明是 "word _" -> "word, tag"
+             // 此时 prefix 应该是 ", "，但要考虑是否保留原来的空格。
+             // 通常习惯：光标贴着前词 -> ", "；光标隔着空格 -> ", "
+             // 只有当光标紧贴逗号 ",|" -> " "
+        }
+        // 重新更严谨的判断
+        const trimmedPrev = prevText.trimEnd();
+        if (trimmedPrev.length > 0 && !/[,，]$/.test(trimmedPrev)) {
+             // 前面有词且没逗号 -> 补逗号
+             // 但是 start 前面可能有空格，我们最好是把逗号插在空格前？或者无所谓
+             // 这里直接在当前位置插入 ", " 比较安全
+             if (!/[,，]\s*$/.test(prevText)) { // 再次确认
+                 prefix = ', ';
+             }
+        }
+    }
+  }
+
+  // 检查后文
+  if (start < len) {
+      const nextText = text.slice(start);
+      // 如果后面紧跟着非逗号非空字符 -> 需要 ", " 分隔 ? 
+      // 或者是插入在词条前，需要加逗号分隔后面的词
+      
+      if (/^[^,，\s]/.test(nextText)) {
+          suffix = ', ';
+      } else if (/^\s+[^,，]/.test(nextText)) {
+           // 后面是空格接词 -> 补逗号
+           suffix = ', ';
+      }
+      // 如果后面已经是逗号，通常不需要补后缀
+  }
+
+  const toInsert = prefix + tag + suffix;
+  applyTextReplacement(el, start, start, toInsert); // end=start means insert
   
   nextTick(() => {
     el.focus();
+    // 光标位置调整到插入词的后面
+    // applyTextReplacement 通常会把光标放在插入文本之后，所以可能不需要额外操作
   });
 }
 
