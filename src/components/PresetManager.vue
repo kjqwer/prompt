@@ -319,6 +319,126 @@ function importPresets(event: Event) {
   (event.target as HTMLInputElement).value = '';
 }
 
+// Share & Cloud
+const showShareDialog = ref(false);
+const shareTab = ref<'create' | 'import'>('create');
+const shareLoading = ref(false);
+const shareResultCode = ref('');
+const shareImportCode = ref('');
+const shareSinglePreset = ref<ExtendedPreset | null>(null);
+
+function openShareDialog(preset?: ExtendedPreset) {
+  shareSinglePreset.value = preset || null;
+  shareTab.value = 'create';
+  shareResultCode.value = '';
+  shareImportCode.value = '';
+  showShareDialog.value = true;
+}
+
+function handleShare(preset: ExtendedPreset) {
+  openShareDialog(preset);
+}
+
+async function generateShareCode() {
+  shareLoading.value = true;
+  try {
+    let data;
+    let type = 'all';
+    
+    if (shareSinglePreset.value) {
+      data = shareSinglePreset.value;
+      type = 'single';
+    } else {
+      const jsonString = store.exportPresetsToJson();
+      try {
+        data = JSON.parse(jsonString);
+      } catch (e) {
+        data = {};
+      }
+    }
+    
+    const response = await fetch('https://sywb.top/api/share/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ data, type })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      shareResultCode.value = result.code;
+      showNotification('分享码生成成功', 'success');
+    } else {
+      showNotification(result.error || '生成失败', 'error');
+    }
+  } catch (error) {
+    console.error(error);
+    showNotification('网络错误，无法生成分享码', 'error');
+  } finally {
+    shareLoading.value = false;
+  }
+}
+
+async function importFromShareCode() {
+  if (!shareImportCode.value || shareImportCode.value.length !== 6) {
+    showNotification('请输入有效的6位分享码', 'error');
+    return;
+  }
+  
+  shareLoading.value = true;
+  try {
+    const response = await fetch(`https://sywb.top/api/share/${shareImportCode.value}`);
+    const result = await response.json();
+    
+    if (result.success) {
+      const data = result.data;
+      if (result.type === 'single') {
+        // Import single preset
+        const newPreset = { ...data };
+        // Remove ID to create new
+        if (newPreset.id) delete newPreset.id;
+        
+        // Ensure name uniqueness or mark as imported
+        newPreset.name = newPreset.name + ' (Imported)';
+        
+        store.createExtendedPreset(newPreset);
+        showNotification(`预设「${newPreset.name}」导入成功`, 'success');
+      } else {
+        // Import all
+        const jsonString = JSON.stringify(data);
+        const success = store.importPresetsFromJson(jsonString);
+        if (success) {
+          showNotification('预设导入成功', 'success');
+        } else {
+          showNotification('导入数据格式错误', 'error');
+        }
+      }
+      closeShareDialog();
+    } else {
+      showNotification(result.error || '分享码无效或已过期', 'error');
+    }
+  } catch (error) {
+    console.error(error);
+    showNotification('网络错误，无法导入', 'error');
+  } finally {
+    shareLoading.value = false;
+  }
+}
+
+function copyShareCode() {
+  navigator.clipboard.writeText(shareResultCode.value);
+  showNotification('分享码已复制', 'success');
+}
+
+function closeShareDialog() {
+  showShareDialog.value = false;
+  shareResultCode.value = '';
+  shareImportCode.value = '';
+  shareSinglePreset.value = null;
+}
+
 // Helpers
 function resetPresetForm() {
   presetForm.value = {
@@ -406,6 +526,11 @@ onMounted(() => {
           </button>
           
           <div class="import-export">
+            <button @click="openShareDialog()" class="btn-icon" title="云端分享/导入">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+              </svg>
+            </button>
             <button @click="exportPresets" class="btn-icon" title="导出预设">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
@@ -433,6 +558,7 @@ onMounted(() => {
           @edit="editPreset"
           @delete="deletePreset"
           @copy="copyPresetContent"
+          @share="handleShare"
         />
       </div>
     </div>
@@ -538,6 +664,83 @@ onMounted(() => {
         <div class="modal-footer">
           <button @click="closeFolderDialog" class="btn-secondary">取消</button>
           <button @click="saveFolder" class="btn-primary">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Share/Import Modal -->
+    <div v-if="showShareDialog" class="modal-overlay" @click.self="closeShareDialog">
+      <div class="modal-content share-modal">
+        <div class="modal-header">
+          <h3>云端分享与导入</h3>
+          <button @click="closeShareDialog" class="close-btn">×</button>
+        </div>
+        
+        <div class="share-tabs">
+          <button 
+            :class="{ active: shareTab === 'create' }" 
+            @click="shareTab = 'create'"
+          >
+            创建分享
+          </button>
+          <button 
+            :class="{ active: shareTab === 'import' }" 
+            @click="shareTab = 'import'"
+          >
+            导入预设
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- Create Share -->
+          <div v-if="shareTab === 'create'" class="share-panel">
+            <div class="share-info">
+              <p v-if="shareSinglePreset">
+                正在分享预设: <strong>{{ shareSinglePreset.name }}</strong>
+              </p>
+              <p v-else>
+                正在分享: <strong>所有预设数据</strong>
+              </p>
+              <p class="text-muted">生成一个6位数的分享码，有效期24小时。</p>
+            </div>
+            
+            <div v-if="shareResultCode" class="share-result">
+              <div class="code-display">{{ shareResultCode }}</div>
+              <button @click="copyShareCode" class="btn-secondary">复制分享码</button>
+            </div>
+            
+            <div v-else class="share-action">
+              <button 
+                @click="generateShareCode" 
+                class="btn-primary full-width" 
+                :disabled="shareLoading"
+              >
+                {{ shareLoading ? '生成中...' : '生成分享码' }}
+              </button>
+            </div>
+          </div>
+          
+          <!-- Import Share -->
+          <div v-if="shareTab === 'import'" class="share-panel">
+            <div class="form-group">
+              <label>输入6位分享码</label>
+              <input 
+                v-model="shareImportCode" 
+                placeholder="例如: 123456" 
+                maxlength="6"
+                class="code-input"
+              />
+            </div>
+            <div class="share-action">
+              <button 
+                @click="importFromShareCode" 
+                class="btn-primary full-width"
+                :disabled="shareLoading || shareImportCode.length !== 6"
+              >
+                {{ shareLoading ? '导入中...' : '导入' }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -841,5 +1044,78 @@ onMounted(() => {
 .color-option.active {
   border-color: var(--color-text-primary);
   box-shadow: 0 0 0 2px var(--color-bg-primary);
+}
+
+.share-modal {
+  max-width: 400px;
+}
+
+.share-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1rem;
+}
+
+.share-tabs button {
+  flex: 1;
+  padding: 0.75rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.share-tabs button.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+.share-info {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: var(--color-text-primary);
+}
+
+.share-info p {
+  margin: 0.5rem 0;
+}
+
+.text-muted {
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+}
+
+.share-result {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+}
+
+.code-display {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.25rem;
+  color: var(--color-accent);
+  padding: 1rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  width: 100%;
+  text-align: center;
+}
+
+.code-input {
+  font-size: 1.5rem;
+  text-align: center;
+  letter-spacing: 0.25rem;
+  padding: 0.75rem;
+}
+
+.full-width {
+  width: 100%;
+  justify-content: center;
+  padding: 0.75rem;
 }
 </style>

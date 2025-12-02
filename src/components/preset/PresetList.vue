@@ -12,6 +12,7 @@ const emit = defineEmits<{
   (e: 'edit', preset: ExtendedPreset): void;
   (e: 'delete', preset: ExtendedPreset): void;
   (e: 'copy', preset: ExtendedPreset): void;
+  (e: 'share', preset: ExtendedPreset): void;
 }>();
 
 function getTypeIcon(type: PresetType) {
@@ -80,6 +81,16 @@ function formatDate(dateStr: string) {
                 </svg>
               </button>
               <div class="dropdown-content">
+                <button @click="emit('share', preset)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"/>
+                    <circle cx="6" cy="12" r="3"/>
+                    <circle cx="18" cy="19" r="3"/>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                  </svg>
+                  分享
+                </button>
                 <button @click="emit('edit', preset)">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
