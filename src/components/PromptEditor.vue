@@ -20,6 +20,8 @@ const startX = ref(0);
 const startY = ref(0);
 const lastX = ref(0);
 const lastY = ref(0);
+const dragOffsetX = ref(0);
+const dragOffsetY = ref(0);
 const dragStarted = ref(false);
 const dragContainer = ref<HTMLElement | null>(null);
 const cachedTokenRects = ref<{
@@ -580,6 +582,12 @@ function onPointerDown(index: number, e: PointerEvent) {
   startY.value = e.clientY;
   lastX.value = e.clientX;
   lastY.value = e.clientY;
+
+  const target = e.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  dragOffsetX.value = e.clientX - rect.left;
+  dragOffsetY.value = e.clientY - rect.top;
+
   dragStarted.value = false;
   isDragging.value = false;
   insertSide.value = null;
@@ -699,7 +707,7 @@ function createPointerPreview(index: number) {
 
 function positionPreview(x: number, y: number) {
   if (!dragPreview.value) return;
-  dragPreview.value.style.transform = `translate(${x + 12}px, ${y + 12}px)`;
+  dragPreview.value.style.transform = `translate(${x - dragOffsetX.value}px, ${y - dragOffsetY.value}px)`;
 }
 
 function updateOverIndexAndSideFast(clientX: number, clientY: number) {
