@@ -381,40 +381,50 @@ async function generateShareCode() {
   }
 }
 
+// Import Analysis State
+const showImportPreview = ref(false);
+const importPreview = ref<{
+  totalPresets: number;
+  totalFolders: number;
+  newPresets: any[];
+  duplicatePresets: any[]; // Same content
+  conflictingPresets: any[]; // Same name, diff content
+  foldersToCreate: any[];
+  foldersToMerge: any[];
+  data: any;
+}>({
+  totalPresets: 0,
+  totalFolders: 0,
+  newPresets: [],
+  duplicatePresets: [],
+  conflictingPresets: [],
+  foldersToCreate: [],
+  foldersToMerge: [],
+  data: null
+});
+
+const importOptions = ref({
+  skipDuplicates: true,
+  renameConflicts: true // if false, overwrite
+});
+
 async function importFromShareCode() {
   if (!shareImportCode.value || shareImportCode.value.length !== 6) {
     showNotification('请输入有效的6位分享码', 'error');
     return;
   }
-  
+
   shareLoading.value = true;
   try {
     const response = await fetch(`https://sywb.top/api/share/${shareImportCode.value}`);
     const result = await response.json();
-    
+
     if (result.success) {
       const data = result.data;
-      if (result.type === 'single') {
-        // Import single preset
-        const newPreset = { ...data };
-        // Remove ID to create new
-        if (newPreset.id) delete newPreset.id;
-        
-        // Ensure name uniqueness or mark as imported
-        newPreset.name = newPreset.name + ' (Imported)';
-        
-        store.createExtendedPreset(newPreset);
-        showNotification(`预设「${newPreset.name}」导入成功`, 'success');
-      } else {
-        // Import all
-        const jsonString = JSON.stringify(data);
-        const success = store.importPresetsFromJson(jsonString);
-        if (success) {
-          showNotification('预设导入成功', 'success');
-        } else {
-          showNotification('导入数据格式错误', 'error');
-        }
-      }
+      
+      // Analyze Import
+      analyzeImport(data);
+      showImportPreview.value = true;
       closeShareDialog();
     } else {
       showNotification(result.error || '分享码无效或已过期', 'error');
@@ -425,6 +435,152 @@ async function importFromShareCode() {
   } finally {
     shareLoading.value = false;
   }
+}
+
+function analyzeImport(data: any) {
+  const incomingPresets = Array.isArray(data.extendedPresets) ? data.extendedPresets : (Array.isArray(data.presets) ? data.presets.map((p: any) => ({
+    ...p,
+    type: 'positive',
+    content: p.text,
+    description: '从旧格式导入'
+  })) : []);
+  
+  const incomingFolders = Array.isArray(data.presetFolders) ? data.presetFolders : [];
+
+  const existingContentSet = new Set(store.extendedPresets.map(p => p.content));
+  const existingNameTypeSet = new Set(store.extendedPresets.map(p => `${p.name}:${p.type}`));
+  const existingFolderMap = new Map(store.presetFolders.map(f => [f.name, f]));
+
+  const preview = {
+    totalPresets: incomingPresets.length,
+    totalFolders: incomingFolders.length,
+    newPresets: [] as any[],
+    duplicatePresets: [] as any[],
+    conflictingPresets: [] as any[],
+    foldersToCreate: [] as any[],
+    foldersToMerge: [] as any[],
+    data
+  };
+
+  // Analyze Folders
+  for (const folder of incomingFolders) {
+    if (existingFolderMap.has(folder.name)) {
+      preview.foldersToMerge.push(folder);
+    } else {
+      preview.foldersToCreate.push(folder);
+    }
+  }
+
+  // Analyze Presets
+  for (const preset of incomingPresets) {
+    const isContentDuplicate = existingContentSet.has(preset.content);
+    const isNameConflict = existingNameTypeSet.has(`${preset.name}:${preset.type}`);
+
+    if (isContentDuplicate) {
+      preview.duplicatePresets.push(preset);
+    } else if (isNameConflict) {
+      preview.conflictingPresets.push(preset);
+    } else {
+      preview.newPresets.push(preset);
+    }
+  }
+
+  importPreview.value = preview;
+}
+
+function executeSmartImport() {
+  const { data, foldersToCreate, foldersToMerge } = importPreview.value;
+  const { skipDuplicates, renameConflicts } = importOptions.value;
+  
+  // 1. Handle Folders
+  const idMap = new Map<string, string>();
+  
+  // Map merged folders
+  for (const folder of foldersToMerge) {
+    const existing = store.presetFolders.find(f => f.name === folder.name);
+    if (existing) {
+      idMap.set(folder.id, existing.id);
+    }
+  }
+  
+  // Create new folders
+  for (const folder of foldersToCreate) {
+    const newId = `folder_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    idMap.set(folder.id, newId);
+    
+    const parentId = folder.parentId ? idMap.get(folder.parentId) : undefined;
+    
+    store.presetFolders.push({
+      ...folder,
+      id: newId,
+      parentId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  // 2. Handle Presets
+  const presetsToImport = [
+    ...importPreview.value.newPresets,
+    ...(skipDuplicates ? [] : importPreview.value.duplicatePresets),
+    ...importPreview.value.conflictingPresets
+  ];
+
+  let importedCount = 0;
+
+  for (const preset of presetsToImport) {
+    const isConflict = importPreview.value.conflictingPresets.includes(preset);
+    let finalName = preset.name;
+    
+    if (isConflict && renameConflicts) {
+      finalName = `${preset.name} (Imported)`;
+      // Ensure unique name if (Imported) also exists
+      let counter = 1;
+      while (store.extendedPresets.some(p => p.name === finalName && p.type === preset.type)) {
+        counter++;
+        finalName = `${preset.name} (Imported ${counter})`;
+      }
+    } else if (isConflict && !renameConflicts) {
+      // Overwrite: Find and update
+      const existing = store.extendedPresets.find(p => p.name === preset.name && p.type === preset.type);
+      if (existing) {
+         Object.assign(existing, {
+           content: preset.content,
+           description: preset.description ?? existing.description,
+           tags: preset.tags ?? existing.tags,
+           updatedAt: new Date().toISOString()
+         });
+         importedCount++;
+         continue; // Skip creation
+      }
+    }
+
+    // Map folder ID
+    const mappedFolderId = preset.folderId ? idMap.get(preset.folderId) : undefined;
+
+    store.extendedPresets.push({
+      id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+      name: finalName,
+      type: preset.type,
+      content: preset.content,
+      description: preset.description,
+      tags: preset.tags,
+      folderId: mappedFolderId,
+      createdAt: preset.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      author: preset.author
+    });
+    importedCount++;
+  }
+
+  store.save();
+  showNotification(`成功导入 ${importedCount} 个预设`, 'success');
+  showImportPreview.value = false;
+}
+
+function closeImportPreview() {
+  showImportPreview.value = false;
+  importPreview.value.data = null;
 }
 
 function copyShareCode() {
@@ -741,6 +897,76 @@ onMounted(() => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Preview Dialog -->
+    <div v-if="showImportPreview" class="modal-overlay" @click.self="closeImportPreview">
+      <div class="modal-content import-preview-modal">
+        <div class="modal-header">
+          <h3>导入预览</h3>
+          <button @click="closeImportPreview" class="close-btn">×</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="preview-summary">
+            <div class="summary-item">
+              <div class="label">找到预设</div>
+              <div class="value">{{ importPreview.totalPresets }}</div>
+            </div>
+            <div class="summary-item">
+              <div class="label">找到文件夹</div>
+              <div class="value">{{ importPreview.totalFolders }}</div>
+            </div>
+          </div>
+          
+          <div class="preview-details">
+            <div class="detail-group success">
+              <h4>✅ 新增 ({{ importPreview.newPresets.length }})</h4>
+              <div class="detail-list" v-if="importPreview.newPresets.length > 0">
+                <span v-for="p in importPreview.newPresets.slice(0, 3)" :key="p.id || p.name">{{ p.name }}</span>
+                <span v-if="importPreview.newPresets.length > 3">...等 {{ importPreview.newPresets.length }} 个</span>
+              </div>
+            </div>
+            
+            <div class="detail-group warning" v-if="importPreview.conflictingPresets.length > 0">
+              <h4>⚠️ 命名冲突 ({{ importPreview.conflictingPresets.length }})</h4>
+              <p class="help-text">名称相同但内容不同</p>
+              <div class="detail-list">
+                <span v-for="p in importPreview.conflictingPresets.slice(0, 3)" :key="p.id || p.name">{{ p.name }}</span>
+                <span v-if="importPreview.conflictingPresets.length > 3">...等</span>
+              </div>
+              <div class="option-check">
+                <label>
+                  <input type="checkbox" v-model="importOptions.renameConflicts">
+                  自动重命名 (添加 Imported 后缀)
+                </label>
+                <div class="sub-text" v-if="!importOptions.renameConflicts">将覆盖现有同名预设的内容</div>
+              </div>
+            </div>
+            
+            <div class="detail-group info" v-if="importPreview.duplicatePresets.length > 0">
+              <h4>♻️ 完全重复 ({{ importPreview.duplicatePresets.length }})</h4>
+              <p class="help-text">内容完全一致</p>
+              <div class="option-check">
+                <label>
+                  <input type="checkbox" v-model="importOptions.skipDuplicates">
+                  跳过导入 (推荐)
+                </label>
+              </div>
+            </div>
+            
+            <div class="detail-group info" v-if="importPreview.foldersToCreate.length > 0">
+              <h4>📁 文件夹结构</h4>
+              <p>将创建 {{ importPreview.foldersToCreate.length }} 个新文件夹，合并 {{ importPreview.foldersToMerge.length }} 个现有文件夹。</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeImportPreview" class="btn-secondary">取消</button>
+          <button @click="executeSmartImport" class="btn-primary">确认导入</button>
         </div>
       </div>
     </div>
@@ -1117,5 +1343,100 @@ onMounted(() => {
   width: 100%;
   justify-content: center;
   padding: 0.75rem;
+}
+
+/* Import Preview Styles */
+.import-preview-modal {
+  max-width: 600px;
+}
+
+.preview-summary {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.summary-item {
+  flex: 1;
+  text-align: center;
+}
+
+.summary-item .label {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.summary-item .value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.preview-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.detail-group {
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-primary);
+}
+
+.detail-group.success { border-left: 4px solid #10b981; }
+.detail-group.warning { border-left: 4px solid #f59e0b; }
+.detail-group.info { border-left: 4px solid #3b82f6; }
+
+.detail-group h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+.detail-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.detail-list span {
+  background-color: var(--color-bg-secondary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.help-text {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem 0;
+}
+
+.option-check {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.option-check label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sub-text {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  margin-left: 1.5rem;
+  margin-top: 0.25rem;
 }
 </style>
