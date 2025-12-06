@@ -209,6 +209,12 @@ function formatDate(dateStr: string) {
   opacity: 1;
 }
 
+@media (max-width: 768px) {
+  .preset-actions {
+    opacity: 1;
+  }
+}
+
 .action-btn {
   display: flex;
   align-items: center;
@@ -263,7 +269,8 @@ function formatDate(dateStr: string) {
   padding: 0.25rem;
 }
 
-.dropdown-menu:hover .dropdown-content {
+.dropdown-menu:hover .dropdown-content,
+.dropdown-menu:focus-within .dropdown-content {
   display: block;
 }
 

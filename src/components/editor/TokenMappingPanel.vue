@@ -1014,6 +1014,7 @@ defineExpose({
     flex-direction: column;
     align-items: flex-start;
     gap: 0.375rem;
+    padding: 0.5rem; /* Increase touch target */
   }
   
   .pe-token-controls {
@@ -1023,24 +1024,34 @@ defineExpose({
   
   .pe-token-controls-compact {
     opacity: 1;
+    gap: 0.5rem;
   }
   
+  /* Increase button size for touch */
+  .pe-add-wrapper-btn, .pe-remove-wrapper-btn, .pe-remove-btn {
+    width: 2rem;
+    height: 2rem;
+  }
+
   .pe-tokens-compact {
-    gap: 0.25rem;
+    gap: 0.5rem;
   }
   
   .pe-token-compact {
-    padding: 0.25rem 0.375rem;
-    gap: 0.25rem;
+    padding: 0.5rem;
+    gap: 0.5rem;
+    /* Ensure it doesn't overflow */
+    width: 100%; 
+    justify-content: space-between;
   }
   
   .pe-key-compact {
-    font-size: 0.6875rem;
-    max-width: 80px;
+    font-size: 0.875rem;
+    max-width: 120px;
   }
   
   .pe-trans-compact, .pe-arrow-compact {
-    font-size: 0.6875rem;
+    font-size: 0.875rem;
   }
 }
 </style>

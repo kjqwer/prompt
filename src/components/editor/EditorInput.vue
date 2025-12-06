@@ -383,12 +383,21 @@ defineExpose({
 
 @media (max-width: 640px) {
   .pe-input-actions {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
   }
   
   .pe-input-actions button {
     width: 100%;
     justify-content: center;
+    padding: 0.75rem 0.5rem; /* Increase touch area */
+  }
+
+  .pe-priority-group {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>

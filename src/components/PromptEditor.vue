@@ -775,7 +775,8 @@ function isRemoveDisabled(token: string): boolean {
 .pe-main {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  height: calc(100vh - 8rem);
+  flex: 1;
+  min-height: 0;
   gap: 1px;
   background-color: var(--color-border);
   width: 100%;

@@ -575,4 +575,35 @@ function apply() {
   text-overflow: ellipsis;
   max-width: 100px;
 }
+
+@media (max-width: 640px) {
+  .tp-list-header {
+    display: none;
+  }
+  
+  .tp-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .tp-checkbox-wrapper {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .tp-item-key {
+    font-weight: bold;
+    width: 100%;
+  }
+  
+  .tp-item-trans {
+    width: 100%;
+  }
+  
+  .tp-error-msg {
+    max-width: none;
+  }
+}
 </style>

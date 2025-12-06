@@ -259,18 +259,20 @@ const localShowPresetDropdown = computed({
 }
 
 @media (max-width: 768px) {
-  .pe-toolbar {
+  .pe-toolbar-content {
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
   }
   
   .pe-left, .pe-right {
-    justify-content: center;
+    width: 100%;
+    justify-content: space-between;
   }
   
   .pe-preset-name {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
   }
 }
 </style>

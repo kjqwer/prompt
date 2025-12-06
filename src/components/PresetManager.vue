@@ -17,6 +17,7 @@ const selectedFolderId = ref<string | null>(null);
 const expandedFolderIds = ref<Set<string>>(new Set());
 
 // Dialog State
+const showMobileSidebar = ref(false);
 const showCreateDialog = ref(false);
 const showFolderDialog = ref(false);
 const editingPreset = ref<ExtendedPreset | null>(null);
@@ -635,8 +636,12 @@ onMounted(() => {
 
 <template>
   <div class="preset-manager">
+    <!-- Mobile Sidebar Overlay -->
+    <div v-if="showMobileSidebar" class="mobile-sidebar-overlay" @click="showMobileSidebar = false"></div>
+
     <!-- Left Sidebar -->
-    <div class="pm-sidebar">
+    <div class="pm-sidebar" :class="{ 'mobile-open': showMobileSidebar }">
+      <button v-if="showMobileSidebar" class="mobile-sidebar-close" @click="showMobileSidebar = false">×</button>
       <PresetSidebar
         :folder-tree="folderTree"
         :selected-folder-id="selectedFolderId"
@@ -655,6 +660,14 @@ onMounted(() => {
     <!-- Right Content -->
     <div class="pm-main">
       <div class="pm-toolbar">
+        <button class="btn-icon mobile-menu-btn" @click="showMobileSidebar = true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+
         <div class="search-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
@@ -1436,7 +1449,145 @@ onMounted(() => {
 .sub-text {
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
-  margin-left: 1.5rem;
-  margin-top: 0.25rem;
+}
+
+/* Mobile Responsive Styles */
+.mobile-sidebar-overlay {
+  display: none;
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+.mobile-sidebar-close {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+    margin-right: 0.5rem;
+  }
+
+  .mobile-sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+    backdrop-filter: blur(2px);
+  }
+
+  .pm-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 80%;
+    max-width: 300px;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    background-color: var(--color-bg-primary);
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .pm-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .mobile-sidebar-close {
+    display: block;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: transparent;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    z-index: 101;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pm-toolbar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .search-box {
+    order: 1;
+    min-width: 150px;
+    flex: 1;
+  }
+  
+  .mobile-menu-btn {
+    order: 0;
+  }
+
+  .filter-group {
+    order: 2;
+    flex: 1 1 45%;
+    min-width: 120px;
+  }
+  
+  .type-select {
+    width: 100%;
+  }
+
+  .action-group {
+    order: 3;
+    flex: 1 1 45%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+  
+  .btn-primary {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+  
+  .modal-content {
+    width: 95%;
+    max-height: 95vh;
+  }
+  
+  .modal-header, .modal-footer {
+    padding: 1rem;
+  }
+  
+  .modal-body {
+    padding: 1rem;
+  }
+  
+  .search-box {
+    min-width: 100%;
+    order: 2;
+    margin-top: 0.5rem;
+  }
+  
+  .filter-group {
+    order: 1;
+  }
+  
+  .action-group {
+    order: 1;
+  }
 }
 </style>
