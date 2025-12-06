@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import PromptEditor from './components/PromptEditor.vue'
 import PromptManager from './components/PromptManager.vue'
 import PresetManager from './components/PresetManager.vue'
-import BackgroundCanvas from './components/BackgroundCanvas.vue'
+import BackgroundCanvas from './components/Background/BackgroundCanvas.vue'
+import GradientBackground from './components/Background/GradientBackground.vue'
+import GridBackground from './components/Background/GridBackground.vue'
 import DevtoolsBanner from './components/DevtoolsBanner.vue'
 import { usePromptStore } from './stores/promptStore'
 
 const currentView = ref<'editor' | 'manager' | 'presets'>('editor')
 const isDark = ref(false)
-const showBackground = ref(true)
+const bgModes = ['particles', 'grid', 'gradient', 'off'] as const
+type BgMode = typeof bgModes[number]
+const currentBgMode = ref<BgMode>('particles')
+
 const store = usePromptStore()
 
 onMounted(() => {
@@ -19,8 +24,19 @@ onMounted(() => {
   updateTheme()
   // 初始化词库与编辑器状态（仅一次）
   store.initialize()
-  const bg = localStorage.getItem('bg.enabled')
-  showBackground.value = bg === null ? true : bg === 'on'
+  
+  // Initialize background mode
+  const savedMode = localStorage.getItem('bg.mode') as BgMode | null
+  const legacyBg = localStorage.getItem('bg.enabled')
+  
+  if (savedMode && bgModes.includes(savedMode)) {
+    currentBgMode.value = savedMode
+  } else if (legacyBg !== null) {
+    // Migrate legacy setting
+    currentBgMode.value = legacyBg === 'on' ? 'particles' : 'off'
+  } else {
+    currentBgMode.value = 'particles'
+  }
 })
 
 function toggleTheme() {
@@ -37,15 +53,32 @@ function switchView(view: 'editor' | 'manager' | 'presets') {
   currentView.value = view
 }
 
-function toggleBackground() {
-  showBackground.value = !showBackground.value
-  localStorage.setItem('bg.enabled', showBackground.value ? 'on' : 'off')
+function cycleBackground() {
+  const currentIndex = bgModes.indexOf(currentBgMode.value)
+  const nextIndex = (currentIndex + 1) % bgModes.length
+  const nextMode = bgModes[nextIndex]
+  if (nextMode) {
+    currentBgMode.value = nextMode
+    localStorage.setItem('bg.mode', currentBgMode.value)
+  }
 }
+
+const bgModeLabel = computed(() => {
+  switch (currentBgMode.value) {
+    case 'particles': return '粒子特效'
+    case 'grid': return '网格特效'
+    case 'gradient': return '渐变特效'
+    case 'off': return '关闭背景'
+    default: return ''
+  }
+})
 </script>
 
 <template>
   <div class="app-container" :class="{ dark: isDark }">
-    <BackgroundCanvas v-if="showBackground" />
+    <BackgroundCanvas v-if="currentBgMode === 'particles'" />
+    <GridBackground v-else-if="currentBgMode === 'grid'" />
+    <GradientBackground v-else-if="currentBgMode === 'gradient'" />
     <DevtoolsBanner />
     <!-- 顶部导航栏 -->
     <header class="app-header">
@@ -112,13 +145,25 @@ function toggleBackground() {
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </button>
-          <button class="bg-toggle" :class="{ active: showBackground }" @click="toggleBackground" title="背景开关">
-            <svg v-if="showBackground" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <button class="bg-toggle" :class="{ active: currentBgMode !== 'off' }" @click="cycleBackground" :title="bgModeLabel">
+            <!-- Particles Icon -->
+            <svg v-if="currentBgMode === 'particles'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="6" cy="12" r="1.5" fill="currentColor"/>
               <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
               <circle cx="18" cy="13" r="1.5" fill="currentColor"/>
               <path d="M4 16c4-2 8-2 12 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
+            <!-- Grid Icon -->
+            <svg v-else-if="currentBgMode === 'grid'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 3h18v18H3z" stroke="currentColor" stroke-width="2"/>
+              <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="currentColor" stroke-width="2"/>
+            </svg>
+            <!-- Gradient Icon -->
+            <svg v-else-if="currentBgMode === 'gradient'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+              <path d="M8 12s1.5-2 4-2 4 2 4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <!-- Off Icon -->
             <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M5 5l14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
               <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2"/>
