@@ -48,10 +48,10 @@ const translationTokens = computed(() => {
   }
   return unmappedTokens.value;
 });
-const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({ 
-  message: '', 
-  type: 'info', 
-  show: false 
+const notification = ref<{ message: string; type: 'success' | 'error' | 'info'; show: boolean }>({
+  message: '',
+  type: 'info',
+  show: false
 });
 
 function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
@@ -94,7 +94,7 @@ const tokens = computed(() => store.tokens);
 const folderTree = computed(() => {
   const folders = store.presetFolders || [];
   const rootFolders = folders.filter(f => !f.parentId);
-  
+
   function buildTree(parentFolders: PresetFolder[]): any[] {
     return parentFolders.map(folder => ({
       ...folder,
@@ -102,7 +102,7 @@ const folderTree = computed(() => {
       presetCount: (store.extendedPresets || []).filter(p => p.folderId === folder.id).length
     }));
   }
-  
+
   return buildTree(rootFolders);
 });
 
@@ -139,8 +139,8 @@ function splitTokensLocal(txt: string): string[] {
   return splitTokens(txt);
 }
 function normalizeToken(t: string): string { return t.trim().replace(/\s+/g, ' '); }
-function normalizePromptLocal(txt: string): string { 
-  return splitTokens(txt).map(t => t.replace(/\s+/g, ' ')).join(', '); 
+function normalizePromptLocal(txt: string): string {
+  return splitTokens(txt).map(t => t.replace(/\s+/g, ' ')).join(', ');
 }
 function applyFullPrompt(newText: string) {
   const el = editorInputRef.value?.inputEl;
@@ -177,7 +177,7 @@ function adjustWeight(core: string, delta: number): string {
   const decimals = stepStr.includes('.') ? stepStr.split('.')[1]!.length : 0;
   const cur = w == null ? 1.0 : w;
   let nw = cur + delta;
-  
+
   nw = roundToDecimals(nw, decimals);
 
   // If weight is 1, return base without suffix
@@ -236,7 +236,7 @@ function applyTextReplacement(
     }
     const ok = (document as any).execCommand && (document as any).execCommand('insertText', false, text);
     if (ok) return;
-  } catch {}
+  } catch { }
   try {
     el.setRangeText(text, start, end, 'end');
     try {
@@ -259,7 +259,7 @@ function handleAddTag(tag: string) {
     store.setPromptTextRaw(store.promptText ? store.promptText + ', ' + tag : tag);
     return;
   }
-  
+
   el.focus();
 
   let start = el.selectionStart ?? store.promptText.length;
@@ -277,7 +277,7 @@ function handleAddTag(tag: string) {
 
   const rawToken = textVal.slice(tokenStart, tokenEnd);
   const trimmedToken = rawToken.trim();
-  
+
   if (trimmedToken.length > 0) {
     const tokenCenter = tokenStart + rawToken.length / 2;
     if (start < tokenCenter) {
@@ -289,43 +289,43 @@ function handleAddTag(tag: string) {
 
   let prefix = '';
   let suffix = '';
-  
+
   if (start > 0) {
     const prevText = textVal.slice(0, start);
     if (/[^,，\s]$/.test(prevText)) {
-        prefix = ', ';
+      prefix = ', ';
     } else if (/[,，]$/.test(prevText)) {
-        prefix = ' ';
+      prefix = ' ';
     } else if (/[,，]\s+$/.test(prevText)) {
-        prefix = '';
+      prefix = '';
     } else if (/\s+$/.test(prevText)) {
-        const trimmedPrev = prevText.trimEnd();
-        if (trimmedPrev.length > 0 && !/[,，]$/.test(trimmedPrev)) {
-             if (!/[,，]\s*$/.test(prevText)) {
-                 prefix = ', ';
-             }
+      const trimmedPrev = prevText.trimEnd();
+      if (trimmedPrev.length > 0 && !/[,，]$/.test(trimmedPrev)) {
+        if (!/[,，]\s*$/.test(prevText)) {
+          prefix = ', ';
         }
+      }
     }
   }
 
   if (start < len) {
-      const nextText = textVal.slice(start);
-      if (/^[^,，\s]/.test(nextText)) {
-          suffix = ', ';
-      } else if (/^\s+[^,，]/.test(nextText)) {
-           suffix = ', ';
-      }
+    const nextText = textVal.slice(start);
+    if (/^[^,，\s]/.test(nextText)) {
+      suffix = ', ';
+    } else if (/^\s+[^,，]/.test(nextText)) {
+      suffix = ', ';
+    }
   }
 
   const toInsert = prefix + tag + suffix;
   applyTextReplacement(el, start, start, toInsert);
-  
+
   nextTick(() => {
     el.focus();
   });
 }
 
-async function copyLeft() { 
+async function copyLeft() {
   try {
     await navigator.clipboard.writeText(store.promptText);
     showNotification('提示词已复制到剪贴板', 'success');
@@ -342,16 +342,16 @@ function unifyPriorityStyle() {
     const { core, weight, wrappers } = parseDetailedToken(token);
     let result = core;
     let currentWrappers = [...wrappers];
-    
+
     if (weight !== undefined && weight !== 1) {
-       const lastWrapper = currentWrappers[currentWrappers.length - 1];
-       if (lastWrapper === '()') {
-         currentWrappers.pop();
-       }
-       const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-       result = `(${result}:${wStr})`;
+      const lastWrapper = currentWrappers[currentWrappers.length - 1];
+      if (lastWrapper === '()') {
+        currentWrappers.pop();
+      }
+      const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+      result = `(${result}:${wStr})`;
     }
-    
+
     return store.wrapToken(result, currentWrappers);
   });
   applyFullPrompt(processed.join(', '));
@@ -359,16 +359,16 @@ function unifyPriorityStyle() {
 }
 
 // 新增功能方法
-function toggleUnderscoreSpace() { 
+function toggleUnderscoreSpace() {
   const tokens = splitTokens(text.value);
-  
+
   // 1. 统计全局倾向
   let spaceCount = 0;
   let underscoreCount = 0;
-  
+
   // 预解析所有 Token
   const parsedList = tokens.map(t => parseDetailedToken(t));
-  
+
   parsedList.forEach(({ core }) => {
     for (const char of core) {
       if (char === ' ') spaceCount++;
@@ -384,35 +384,35 @@ function toggleUnderscoreSpace() {
 
   const newTokens = parsedList.map(({ core, weight, wrappers }) => {
     let newCore = core;
-    
+
     if (targetIsUnderscore) {
       newCore = newCore.replace(/ /g, '_');
     } else {
       newCore = newCore.replace(/_/g, ' ');
     }
-    
+
     // 重构 Token (保持权重和包裹层)
     let result = newCore;
     let currentWrappers = [...wrappers];
-    
+
     if (weight !== undefined && weight !== 1) {
-       const lastWrapper = currentWrappers[currentWrappers.length - 1];
-       if (lastWrapper === '()') {
-         currentWrappers.pop();
-       }
-       const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
-       result = `(${result}:${wStr})`;
+      const lastWrapper = currentWrappers[currentWrappers.length - 1];
+      if (lastWrapper === '()') {
+        currentWrappers.pop();
+      }
+      const wStr = Number.isInteger(weight) ? weight.toString() : weight.toFixed(2).replace(/\.?0+$/, '');
+      result = `(${result}:${wStr})`;
     }
-    
+
     return store.wrapToken(result, currentWrappers);
   });
 
-  applyFullPrompt(newTokens.join(', ')); 
+  applyFullPrompt(newTokens.join(', '));
   showNotification(targetIsUnderscore ? '已统一为下划线格式' : '已统一为空格格式', 'success');
 }
 
-function addWrapperToToken(index: number) { 
-  const tokens = splitTokensLocal(text.value); 
+function addWrapperToToken(index: number) {
+  const tokens = splitTokensLocal(text.value);
   if (index < 0 || index >= tokens.length) return;
   const token = tokens[index]!;
   const parsed = store.parseTokenWrappers(token);
@@ -425,12 +425,12 @@ function addWrapperToToken(index: number) {
     const newWrappers = [...wrappers, priorityStyle.value];
     tokens[index] = store.wrapToken(core, newWrappers);
   }
-  applyFullPrompt(tokens.join(', ')); 
+  applyFullPrompt(tokens.join(', '));
   showNotification('已添加优先级', 'success');
 }
 
-function removeWrapperFromToken(index: number) { 
-  const tokens = splitTokensLocal(text.value); 
+function removeWrapperFromToken(index: number) {
+  const tokens = splitTokensLocal(text.value);
   if (index < 0 || index >= tokens.length) return;
   const token = tokens[index]!;
   const { core, wrappers } = store.parseTokenWrappers(token);
@@ -441,7 +441,7 @@ function removeWrapperFromToken(index: number) {
     const newWrappers = wrappers.slice(0, -1);
     tokens[index] = store.wrapToken(core, newWrappers);
   }
-  applyFullPrompt(tokens.join(', ')); 
+  applyFullPrompt(tokens.join(', '));
   showNotification('已调整优先级', 'success');
 }
 
@@ -493,11 +493,11 @@ function onPointerDown(index: number, e: PointerEvent) {
 }
 
 function handlePointerMove(e: PointerEvent) {
-  lastX.value = e.clientX; 
+  lastX.value = e.clientX;
   lastY.value = e.clientY;
   const dx = e.clientX - startX.value;
   const dy = e.clientY - startY.value;
-  
+
   if (!dragStarted.value) {
     if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
       dragStarted.value = true;
@@ -506,7 +506,7 @@ function handlePointerMove(e: PointerEvent) {
     }
     return;
   }
-  
+
   if (!isDragging.value) return;
 
   // 使用 requestAnimationFrame 节流渲染
@@ -520,9 +520,9 @@ function handlePointerMove(e: PointerEvent) {
 
 function handlePointerUp(e: PointerEvent) {
   window.removeEventListener('pointermove', handlePointerMove);
-  if (!dragStarted.value || draggingIndex.value == null) { 
-    cleanupDrag(); 
-    return; 
+  if (!dragStarted.value || draggingIndex.value == null) {
+    cleanupDrag();
+    return;
   }
   const from = draggingIndex.value!;
   const j = overIndex.value;
@@ -576,7 +576,7 @@ function createPointerPreview(index: number) {
   preview.style.left = '0';
   preview.style.zIndex = '1000';
   preview.style.pointerEvents = 'none';
-  ;(preview.style as any).contain = 'layout style paint';
+  ; (preview.style as any).contain = 'layout style paint';
   preview.style.willChange = 'transform, opacity';
   document.body.appendChild(preview);
   dragPreview.value = preview;
@@ -590,7 +590,7 @@ function positionPreview(x: number, y: number) {
 function updateOverIndexAndSideFast(clientX: number, clientY: number) {
   const dragContainer = tokenMappingRef.value?.dragContainer;
   if (!dragContainer) return;
-  
+
   // 计算鼠标在容器内的相对坐标
   const containerRect = dragContainer.getBoundingClientRect();
   const relX = clientX - containerRect.left;
@@ -598,7 +598,7 @@ function updateOverIndexAndSideFast(clientX: number, clientY: number) {
 
   // 在缓存中查找命中的 Token
   // 简单碰撞检测
-  const target = cachedTokenRects.value.find(item => 
+  const target = cachedTokenRects.value.find(item =>
     relX >= item.left && relX <= item.left + item.width &&
     relY >= item.top && relY <= item.top + item.height
   );
@@ -643,13 +643,13 @@ function addTokenAfter(i: number) {
 }
 
 function savePreset() {
-  if (!presetName.value.trim()) { 
-    showNotification('请输入预设名称', 'error'); 
-    return; 
+  if (!presetName.value.trim()) {
+    showNotification('请输入预设名称', 'error');
+    return;
   }
-  
+
   const name = presetName.value.trim();
-  
+
   // 只保存到新的扩展预设系统
   const folderId = selectedFolderId.value || store.presetManagement?.settings?.defaultFolder;
   store.createExtendedPreset({
@@ -659,7 +659,7 @@ function savePreset() {
     description: '从编辑器快速保存',
     folderId: folderId
   });
-  
+
   showNotification(`预设「${name}」已保存到预设管理`, 'success');
   presetName.value = '';
 }
@@ -716,7 +716,7 @@ function displayTrans(key: string): string {
   const { core, weight, wrappers, prefix, suffix } = parseDetailedToken(key);
   const tag = store.getTagByKey(core);
   const translatedCore = tag?.translation?.[selectedLang.value] ?? tag?.key ?? core;
-  
+
   return constructToken(translatedCore, weight, wrappers, prefix, suffix);
 }
 
@@ -728,84 +728,38 @@ function isRemoveDisabled(token: string): boolean {
 
 <template>
   <div class="pe-root">
-    <EditorToolbar
-      :languages="store.languages as LangCode[]"
-      v-model:selected-lang="selectedLang"
-      v-model:preset-name="presetName"
-      v-model:selected-folder-id="selectedFolderId"
-      v-model:show-preset-dropdown="showPresetDropdown"
-      :folder-tree="folderTree"
-      :flattened-folders="flattenedFolders"
-      @copy="copyLeft"
-      @save-preset="savePreset"
-      @preset-load="handlePresetLoad"
-      @preset-save="handlePresetSave"
-      @preset-delete="handlePresetDelete"
-      @preset-rename="handlePresetRename"
-    />
+    <EditorToolbar :languages="store.languages as LangCode[]" v-model:selected-lang="selectedLang"
+      v-model:preset-name="presetName" v-model:selected-folder-id="selectedFolderId"
+      v-model:show-preset-dropdown="showPresetDropdown" :folder-tree="folderTree" :flattened-folders="flattenedFolders"
+      @copy="copyLeft" @save-preset="savePreset" @preset-load="handlePresetLoad" @preset-save="handlePresetSave"
+      @preset-delete="handlePresetDelete" @preset-rename="handlePresetRename" />
 
-    <main class="pe-main">
-      <EditorInput
-        ref="editorInputRef"
-        v-model:text="text"
-        v-model:priority-style="priorityStyle"
-        v-model:priority-step="priorityStep"
-        :suggestions="suggestions"
+    <div class="pe-main">
+      <EditorInput ref="editorInputRef" v-model:text="text" v-model:priority-style="priorityStyle"
+        v-model:priority-step="priorityStep" :suggestions="suggestions"
         :get-suggestions="(prefix, limit) => store.getSuggestions(prefix, limit)"
-        @update-suggestions="updateSuggestionsFromText"
-        @copy="copyLeft"
-        @replace-cn-comma="replaceCnComma"
-        @format-prompt="formatPrompt"
-        @unify-priority="unifyPriorityStyle"
-        @toggle-underscore="toggleUnderscoreSpace"
-        @add-tag="handleAddTag"
-      />
-      
-      <TokenMappingPanel
-        ref="tokenMappingRef"
-        :tokens="tokens"
-        :selected-lang="selectedLang"
-        v-model:view-mode="viewMode"
-        :dragging-index="draggingIndex"
-        :over-index="overIndex"
-        :insert-side="insertSide"
-        :is-dragging="isDragging"
-        :edit-suggestions="editSuggestions"
-        :priority-style="priorityStyle"
-        :display-trans="displayTrans"
-        :is-unmapped="isUnmapped"
-        :get-token-wrapper-info="getTokenWrapperInfo"
-        :has-weight-suffix="hasWeightSuffix"
-        :get-suggestions="(prefix, limit) => store.getSuggestions(prefix, limit)"
-        @pointer-down="onPointerDown"
-        @begin-edit="(i) => editingIndex = i"
-        @commit-edit="commitEdit"
-        @cancel-edit="() => editingIndex = null"
-        @show-add-map="showAddMap"
-        @add-wrapper="addWrapperToToken"
-        @remove-wrapper="removeWrapperFromToken"
-        @remove-token="removeToken"
-        @add-token-after="addTokenAfter"
+        @update-suggestions="updateSuggestionsFromText" @copy="copyLeft" @replace-cn-comma="replaceCnComma"
+        @format-prompt="formatPrompt" @unify-priority="unifyPriorityStyle" @toggle-underscore="toggleUnderscoreSpace"
+        @add-tag="handleAddTag" />
+
+      <TokenMappingPanel ref="tokenMappingRef" :tokens="tokens" :selected-lang="selectedLang"
+        v-model:view-mode="viewMode" :dragging-index="draggingIndex" :over-index="overIndex" :insert-side="insertSide"
+        :is-dragging="isDragging" :edit-suggestions="editSuggestions" :priority-style="priorityStyle"
+        :display-trans="displayTrans" :is-unmapped="isUnmapped" :get-token-wrapper-info="getTokenWrapperInfo"
+        :has-weight-suffix="hasWeightSuffix" :get-suggestions="(prefix, limit) => store.getSuggestions(prefix, limit)"
+        @pointer-down="onPointerDown" @begin-edit="(i) => editingIndex = i" @commit-edit="commitEdit"
+        @cancel-edit="() => editingIndex = null" @show-add-map="showAddMap" @add-wrapper="addWrapperToToken"
+        @remove-wrapper="removeWrapperFromToken" @remove-token="removeToken" @add-token-after="addTokenAfter"
         @show-translation-popup="() => { translationTargetToken = null; showTranslationPopup = true; }"
-        @update-edit-value="updateEditSuggestionsFromValue"
-      />
-    </main>
-    
+        @update-edit-value="updateEditSuggestionsFromValue" />
+    </div>
+
     <!-- 翻译弹窗 -->
-    <TranslationPopup
-      :visible="showTranslationPopup"
-      :tokens="translationTokens"
-      :target-lang="selectedLang"
-      @close="() => { showTranslationPopup = false; translationTargetToken = null; }"
-      @apply="handleApplyTranslation"
-    />
+    <TranslationPopup :visible="showTranslationPopup" :tokens="translationTokens" :target-lang="selectedLang"
+      @close="() => { showTranslationPopup = false; translationTargetToken = null; }" @apply="handleApplyTranslation" />
 
     <!-- 通知组件 -->
-    <NotificationToast 
-      :message="notification.message"
-      :type="notification.type"
-      :show="notification.show"
-    />
+    <NotificationToast :message="notification.message" :type="notification.type" :show="notification.show" />
   </div>
 </template>
 
@@ -835,10 +789,9 @@ function isRemoveDisabled(token: string): boolean {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-  
+
   .pe-left-pane {
     border-bottom: 1px solid var(--color-border);
   }
 }
-
 </style>
