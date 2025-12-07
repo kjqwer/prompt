@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { PromptPreset, PresetType } from '../types';
 import NotificationToast from './NotificationToast.vue';
+import IconPresetType from './icons/IconPresetType.vue';
 
 const store = usePromptStore();
 
@@ -325,19 +326,6 @@ function importPreset(event: Event) {
   (event.target as HTMLInputElement).value = '';
 }
 
-function getTypeIcon(type: string) {
-  const icons: Record<string, string> = {
-    positive: '🪄',
-    negative: '⛔',
-    setting: '⚙️',
-    style: '🖌️',
-    character: '🧙',
-    scene: '🏞️',
-    custom: '🧩'
-  };
-  return icons[type] || '🧩';
-}
-
 function getTypeLabel(type: string) {
   const typeMap: Record<string, string> = {
     'positive': '正面',
@@ -513,12 +501,14 @@ onUnmounted(() => {
             <span class="pd-group-count">{{ group.presets.length }}</span>
           </div>
           
-          <div v-for="p in group.presets" :key="`${p.name}_${p.type}`" class="pd-item">
+          <div v-for="p in group.presets" :key="`${p.name}_${p.type}`" class="pd-item nav-btn">
             <template v-if="renamingPreset !== p.name">
               <div class="pd-item-main" @click="loadPreset(p.name)">
                 <div class="pd-item-header">
                   <div class="pd-item-title">
-                    <span class="pd-item-icon" :title="getTypeLabel(p.type)">{{ getTypeIcon(p.type) }}</span>
+                    <span class="pd-item-icon" :title="getTypeLabel(p.type)">
+                      <IconPresetType :type="p.type" width="16" height="16" />
+                    </span>
                     <span class="pd-item-name">{{ p.name }}</span>
                   </div>
                   <span class="pd-item-date">{{ formatDate(p.updatedAt) }}</span>

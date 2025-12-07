@@ -6,6 +6,7 @@ import NotificationToast from './NotificationToast.vue';
 import PresetSidebar from './preset/PresetSidebar.vue';
 import PresetList from './preset/PresetList.vue';
 import FolderSelector from './preset/FolderSelector.vue';
+import TypeSelector from './preset/TypeSelector.vue';
 
 const store = usePromptStore();
 
@@ -55,14 +56,14 @@ function showNotification(message: string, type: 'success' | 'error' | 'info' = 
 }
 
 // Preset Types
-const presetTypes: { value: PresetType; label: string; icon: string }[] = [
-  { value: 'positive', label: '正面提示词', icon: '🪄' },
-  { value: 'negative', label: '负面提示词', icon: '⛔' },
-  { value: 'setting', label: '设定标签', icon: '⚙️' },
-  { value: 'style', label: '风格样式', icon: '🖌️' },
-  { value: 'character', label: '角色人物', icon: '🧙' },
-  { value: 'scene', label: '场景环境', icon: '🏞️' },
-  { value: 'custom', label: '自定义', icon: '🧩' }
+const presetTypes: { value: PresetType; label: string }[] = [
+  { value: 'positive', label: '正面提示词' },
+  { value: 'negative', label: '负面提示词' },
+  { value: 'setting', label: '设定标签' },
+  { value: 'style', label: '风格样式' },
+  { value: 'character', label: '角色人物' },
+  { value: 'scene', label: '场景环境' },
+  { value: 'custom', label: '自定义' }
 ];
 
 // Computed
@@ -80,6 +81,11 @@ const folderTree = computed(() => {
   
   return buildTree(rootFolders);
 });
+
+const filterOptions = computed<{ value: PresetType | 'all'; label: string }[]>(() => [
+  { value: 'all', label: '所有类型' },
+  ...presetTypes
+]);
 
 const filteredPresets = computed(() => {
   let presets = store.extendedPresets || [];
@@ -677,12 +683,10 @@ onMounted(() => {
         </div>
 
         <div class="filter-group">
-          <select v-model="selectedType" class="type-select">
-            <option value="all">所有类型</option>
-            <option v-for="type in presetTypes" :key="type.value" :value="type.value">
-              {{ type.icon }} {{ type.label }}
-            </option>
-          </select>
+          <TypeSelector
+            v-model="selectedType"
+            :options="filterOptions"
+          />
         </div>
 
         <div class="action-group">
@@ -748,11 +752,11 @@ onMounted(() => {
           <div class="form-row">
             <div class="form-group">
               <label>类型</label>
-              <select v-model="presetForm.type">
-                <option v-for="t in presetTypes" :key="t.value" :value="t.value">
-                  {{ t.icon }} {{ t.label }}
-                </option>
-              </select>
+              <TypeSelector
+                :modelValue="presetForm.type"
+                @update:modelValue="val => presetForm.type = val as PresetType"
+                :options="presetTypes"
+              />
             </div>
             <div class="form-group">
               <label>文件夹</label>
