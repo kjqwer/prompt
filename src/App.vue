@@ -58,6 +58,12 @@ function toggleTheme(event: MouseEvent) {
     return
   }
 
+  const willBeDark = !isDark.value
+
+  if (willBeDark) {
+    document.documentElement.classList.add('theme-transition-reverse')
+  }
+
   const x = event.clientX
   const y = event.clientY
   const endRadius = Math.hypot(
@@ -66,7 +72,7 @@ function toggleTheme(event: MouseEvent) {
   )
 
   const transition = document.startViewTransition(async () => {
-    isDark.value = !isDark.value
+    isDark.value = willBeDark
     localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
     updateTheme()
     await nextTick()
@@ -77,16 +83,24 @@ function toggleTheme(event: MouseEvent) {
       `circle(0px at ${x}px ${y}px)`,
       `circle(${endRadius}px at ${x}px ${y}px)`
     ]
+
+    const isReverse = willBeDark
+    
     document.documentElement.animate(
       {
-        clipPath: clipPath,
+        clipPath: isReverse ? [...clipPath].reverse() : clipPath,
       },
       {
         duration: 400,
         easing: 'ease-out',
-        pseudoElement: '::view-transition-new(root)',
+        pseudoElement: isReverse ? '::view-transition-old(root)' : '::view-transition-new(root)',
+        fill: 'forwards',
       }
     )
+  })
+
+  transition.finished.then(() => {
+    document.documentElement.classList.remove('theme-transition-reverse')
   })
 }
 
@@ -192,7 +206,6 @@ const bgModeLabel = computed(() => {
 </template>
 
 <style>
-/* View Transitions API styles */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
@@ -204,6 +217,13 @@ const bgModeLabel = computed(() => {
 }
 ::view-transition-new(root) {
   z-index: 9999;
+}
+
+.theme-transition-reverse::view-transition-old(root) {
+  z-index: 9999;
+}
+.theme-transition-reverse::view-transition-new(root) {
+  z-index: 1;
 }
 
 :root {
