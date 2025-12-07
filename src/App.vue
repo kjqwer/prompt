@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import PromptEditor from './components/PromptEditor.vue'
 import PromptManager from './components/PromptManager.vue'
 import PresetManager from './components/PresetManager.vue'
@@ -8,6 +8,14 @@ import GradientBackground from './components/Background/GradientBackground.vue'
 import GridBackground from './components/Background/GridBackground.vue'
 import DevtoolsBanner from './components/DevtoolsBanner.vue'
 import { usePromptStore } from './stores/promptStore'
+
+// Icons
+import IconEditor from './components/icons/IconEditor.vue'
+import IconPresets from './components/icons/IconPresets.vue'
+import IconManager from './components/icons/IconManager.vue'
+import IconTheme from './components/icons/IconTheme.vue'
+import IconBackground from './components/icons/IconBackground.vue'
+import IconGithub from './components/icons/IconGithub.vue'
 
 const currentView = ref<'editor' | 'manager' | 'presets'>('editor')
 const isDark = ref(false)
@@ -39,10 +47,47 @@ onMounted(() => {
   }
 })
 
-function toggleTheme() {
-  isDark.value = !isDark.value
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-  updateTheme()
+function toggleTheme(event: MouseEvent) {
+  const isAppearanceTransition = 'startViewTransition' in document
+    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  if (!isAppearanceTransition) {
+    isDark.value = !isDark.value
+    localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+    updateTheme()
+    return
+  }
+
+  const x = event.clientX
+  const y = event.clientY
+  const endRadius = Math.hypot(
+    Math.max(x, innerWidth - x),
+    Math.max(y, innerHeight - y)
+  )
+
+  const transition = document.startViewTransition(async () => {
+    isDark.value = !isDark.value
+    localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+    updateTheme()
+    await nextTick()
+  })
+
+  transition.ready.then(() => {
+    const clipPath = [
+      `circle(0px at ${x}px ${y}px)`,
+      `circle(${endRadius}px at ${x}px ${y}px)`
+    ]
+    document.documentElement.animate(
+      {
+        clipPath: clipPath,
+      },
+      {
+        duration: 400,
+        easing: 'ease-out',
+        pseudoElement: '::view-transition-new(root)',
+      }
+    )
+  })
 }
 
 function updateTheme() {
@@ -92,9 +137,7 @@ const bgModeLabel = computed(() => {
             title="打开 GitHub 仓库"
           >
             <!-- GitHub 标志 -->
-            <svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.49.5.09.682-.217.682-.483 0-.237-.009-.868-.013-1.705-2.782.604-3.37-1.342-3.37-1.342-.455-1.157-1.111-1.466-1.111-1.466-.908-.62.069-.607.069-.607 1.003.07 1.53 1.03 1.53 1.03.892 1.528 2.341 1.087 2.91.832.092-.646.35-1.087.637-1.338-2.221-.253-4.558-1.11-4.558-4.941 0-1.091.39-1.984 1.029-2.682-.104-.254-.446-1.274.098-2.656 0 0 .84-.269 2.753 1.025.798-.222 1.653-.333 2.504-.337.85.004 1.706.115 2.504.337 1.911-1.294 2.75-1.025 2.75-1.025.546 1.382.203 2.402.1 2.656.64.698 1.028 1.591 1.028 2.682 0 3.84-2.34 4.685-4.566 4.934.359.309.679.919.679 1.853 0 1.337-.012 2.415-.012 2.744 0 .268.18.577.688.479C19.137 20.163 22 16.416 22 12c0-5.523-4.477-10-10-10z"/>
-            </svg>
+            <IconGithub />
             <span class="app-title">提示词编辑器</span>
           </a>
         </div>
@@ -105,10 +148,7 @@ const bgModeLabel = computed(() => {
             :class="{ active: currentView === 'editor' }"
             @click="switchView('editor')"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <IconEditor width="16" height="16" />
             <span>编辑器</span>
           </button>
           <button 
@@ -116,11 +156,7 @@ const bgModeLabel = computed(() => {
             :class="{ active: currentView === 'presets' }"
             @click="switchView('presets')"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/>
-              <polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" stroke-width="2"/>
-              <polyline points="7,3 7,8 15,8" stroke="currentColor" stroke-width="2"/>
-            </svg>
+            <IconPresets width="16" height="16" />
             <span>预设管理</span>
           </button>
           <button 
@@ -128,46 +164,17 @@ const bgModeLabel = computed(() => {
             :class="{ active: currentView === 'manager' }"
             @click="switchView('manager')"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 3h18v18H3zM9 9h6v6H9z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <IconManager width="16" height="16" />
             <span>词库管理</span>
           </button>
         </nav>
 
         <div class="header-right">
           <button class="theme-toggle" @click="toggleTheme" title="切换主题">
-            <svg v-if="!isDark" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
-              <path d="m12 1 0 2m0 18 0 2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12l2 0m18 0 2 0M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
+            <IconTheme :is-dark="isDark" />
           </button>
           <button class="bg-toggle" :class="{ active: currentBgMode !== 'off' }" @click="cycleBackground" :title="bgModeLabel">
-            <!-- Particles Icon -->
-            <svg v-if="currentBgMode === 'particles'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="6" cy="12" r="1.5" fill="currentColor"/>
-              <circle cx="12" cy="9" r="1.5" fill="currentColor"/>
-              <circle cx="18" cy="13" r="1.5" fill="currentColor"/>
-              <path d="M4 16c4-2 8-2 12 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            <!-- Grid Icon -->
-            <svg v-else-if="currentBgMode === 'grid'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 3h18v18H3z" stroke="currentColor" stroke-width="2"/>
-              <path d="M3 9h18M3 15h18M9 3v18M15 3v18" stroke="currentColor" stroke-width="2"/>
-            </svg>
-            <!-- Gradient Icon -->
-            <svg v-else-if="currentBgMode === 'gradient'" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-              <path d="M8 12s1.5-2 4-2 4 2 4 2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <!-- Off Icon -->
-            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 5l14 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <circle cx="12" cy="12" r="6" stroke="currentColor" stroke-width="2"/>
-            </svg>
+            <IconBackground :mode="currentBgMode" />
           </button>
         </div>
       </div>
@@ -185,7 +192,20 @@ const bgModeLabel = computed(() => {
 </template>
 
 <style>
-/* 全局样式重置和变量定义 */
+/* View Transitions API styles */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
 :root {
   /* 亮色主题 */
   --color-bg-primary: #ffffff;
