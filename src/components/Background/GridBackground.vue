@@ -132,6 +132,7 @@ onMounted(() => {
   resize()
   window.addEventListener('resize', resize)
   window.addEventListener('mousemove', onMouseMove)
+  draw() // Initial draw
   raf = requestAnimationFrame(loop)
 })
 

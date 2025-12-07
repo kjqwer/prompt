@@ -168,6 +168,7 @@ onMounted(() => {
   })
   window.addEventListener('mousemove', onMouseMove, { passive: true })
   document.addEventListener('visibilitychange', onVisibilityChange)
+  draw() // Initial draw to ensure no flicker
   raf = requestAnimationFrame(loop)
 })
 

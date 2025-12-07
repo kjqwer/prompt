@@ -112,14 +112,83 @@ function switchView(view: 'editor' | 'manager' | 'presets') {
   currentView.value = view
 }
 
-function cycleBackground() {
-  const currentIndex = bgModes.indexOf(currentBgMode.value)
-  const nextIndex = (currentIndex + 1) % bgModes.length
-  const nextMode = bgModes[nextIndex]
-  if (nextMode) {
-    currentBgMode.value = nextMode
-    localStorage.setItem('bg.mode', currentBgMode.value)
+function cycleBackground(event?: MouseEvent) {
+  const isAppearanceTransition = 'startViewTransition' in document
+    && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    && event instanceof MouseEvent
+
+  const updateState = () => {
+    const currentIndex = bgModes.indexOf(currentBgMode.value)
+    const nextIndex = (currentIndex + 1) % bgModes.length
+    const nextMode = bgModes[nextIndex]
+    if (nextMode) {
+      currentBgMode.value = nextMode
+      localStorage.setItem('bg.mode', currentBgMode.value)
+    }
   }
+
+  if (!isAppearanceTransition) {
+    updateState()
+    return
+  }
+
+  const x = event.clientX
+  const y = event.clientY
+
+  const transition = document.startViewTransition(async () => {
+    updateState()
+    await nextTick()
+  })
+
+  transition.ready.then(() => {
+    const effects = ['circle', 'vertical', 'horizontal', 'diamond']
+    const effect = effects[Math.floor(Math.random() * effects.length)]
+    
+    let clipPath: string[] = []
+    
+    if (effect === 'circle') {
+      const endRadius = Math.hypot(
+        Math.max(x, innerWidth - x),
+        Math.max(y, innerHeight - y)
+      )
+      clipPath = [
+        `circle(0px at ${x}px ${y}px)`,
+        `circle(${endRadius}px at ${x}px ${y}px)`
+      ]
+    } else if (effect === 'vertical') {
+      clipPath = [
+        'inset(0 0 100% 0)',
+        'inset(0 0 0 0)'
+      ]
+    } else if (effect === 'horizontal') {
+      clipPath = [
+        'inset(0 100% 0 0)',
+        'inset(0 0 0 0)'
+      ]
+    } else if (effect === 'diamond') {
+      const endRadius = Math.hypot(
+        Math.max(x, innerWidth - x),
+        Math.max(y, innerHeight - y)
+      ) * 1.5 // Multiply to ensure coverage for diamond shape
+      
+      clipPath = [
+        `polygon(${x}px ${y}px, ${x}px ${y}px, ${x}px ${y}px, ${x}px ${y}px)`,
+        `polygon(${x}px ${y - endRadius}px, ${x + endRadius}px ${y}px, ${x}px ${y + endRadius}px, ${x - endRadius}px ${y}px)`
+      ]
+    }
+
+    document.documentElement.animate(
+      {
+        clipPath: clipPath,
+      },
+      {
+        duration: 1500,
+        easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+        pseudoElement: '::view-transition-new(root)',
+        fill: 'forwards',
+      }
+    )
+  })
 }
 
 const bgModeLabel = computed(() => {
