@@ -14,6 +14,7 @@ const props = defineProps<{
   expandedIds: Set<string>;
   allCount: number;
   uncategorizedCount: number;
+  favoritesCount: number;
 }>();
 
 const emit = defineEmits<{
@@ -23,6 +24,7 @@ const emit = defineEmits<{
   (e: 'create-sub-folder', parentId: string): void;
   (e: 'edit-folder', folder: PresetFolder): void;
   (e: 'delete-folder', folder: PresetFolder): void;
+  (e: 'share-folder', folder: PresetFolder): void;
 }>();
 
 function selectFolder(id: string | null) {
@@ -55,6 +57,16 @@ function selectFolder(id: string | null) {
           <span class="item-name">所有预设</span>
           <span class="item-count">{{ allCount }}</span>
         </div>
+
+        <div 
+          class="sidebar-item" 
+          :class="{ active: selectedFolderId === 'favorites' }"
+          @click="selectFolder('favorites')"
+        >
+          <span class="item-icon">❤️</span>
+          <span class="item-name">我的收藏</span>
+          <span class="item-count">{{ favoritesCount }}</span>
+        </div>
         
         <div 
           class="sidebar-item" 
@@ -83,6 +95,7 @@ function selectFolder(id: string | null) {
           @create-sub="emit('create-sub-folder', $event)"
           @edit="emit('edit-folder', $event)"
           @delete="emit('delete-folder', $event)"
+          @share="emit('share-folder', $event)"
         />
       </div>
     </div>

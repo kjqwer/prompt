@@ -13,6 +13,7 @@ const emit = defineEmits<{
   (e: 'delete', preset: ExtendedPreset): void;
   (e: 'copy', preset: ExtendedPreset): void;
   (e: 'share', preset: ExtendedPreset): void;
+  (e: 'toggle-favorite', preset: ExtendedPreset): void;
 }>();
 
 function getTypeIcon(type: PresetType) {
@@ -61,6 +62,11 @@ function formatDate(dateStr: string) {
           </div>
           <h4 class="preset-name" :title="preset.name">{{ preset.name }}</h4>
           <div class="preset-actions">
+            <button @click="emit('toggle-favorite', preset)" class="action-btn" :class="{ 'is-favorite': preset.isFavorite }" title="收藏">
+              <svg width="14" height="14" viewBox="0 0 24 24" :fill="preset.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+              </svg>
+            </button>
             <button @click="emit('apply', preset)" class="action-btn apply-btn" title="应用预设">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20,6 9,17 4,12"/>
@@ -238,6 +244,17 @@ function formatDate(dateStr: string) {
   background-color: var(--color-accent);
   color: white;
   border-color: var(--color-accent);
+}
+
+.is-favorite {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.is-favorite:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
 }
 
 /* Dropdown menu implementation */

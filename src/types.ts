@@ -86,6 +86,7 @@ export interface ExtendedPreset {
   updatedAt: string;
   isPublic?: boolean;
   author?: string;
+  isFavorite?: boolean;
 }
 
 // 预设文件夹

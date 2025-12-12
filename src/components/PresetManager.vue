@@ -90,7 +90,9 @@ const filteredPresets = computed(() => {
   }
   
   // Filter by Folder
-  if (selectedFolderId.value) {
+  if (selectedFolderId.value === 'favorites') {
+    presets = presets.filter(p => p.isFavorite);
+  } else if (selectedFolderId.value) {
     presets = presets.filter(p => p.folderId === selectedFolderId.value);
   } else if (selectedFolderId.value === '') {
     // Uncategorized
@@ -137,6 +139,7 @@ const flattenedFolders = computed(() => {
 
 const allPresetsCount = computed(() => (store.extendedPresets || []).length);
 const uncategorizedCount = computed(() => (store.extendedPresets || []).filter(p => !p.folderId).length);
+const favoritesCount = computed(() => (store.extendedPresets || []).filter(p => p.isFavorite).length);
 
 // Actions
 function handleFolderSelect(id: string | null) {
@@ -262,6 +265,13 @@ function deletePreset(preset: ExtendedPreset) {
   }
 }
 
+function toggleFavorite(preset: ExtendedPreset) {
+  store.updateExtendedPreset(preset.id, { isFavorite: !preset.isFavorite });
+  if (!preset.isFavorite) {
+    showNotification(`已添加到收藏`, 'success');
+  }
+}
+
 async function copyPresetContent(preset: ExtendedPreset) {
   try {
     await navigator.clipboard.writeText(preset.content);
@@ -327,9 +337,11 @@ const shareLoading = ref(false);
 const shareResultCode = ref('');
 const shareImportCode = ref('');
 const shareSinglePreset = ref<ExtendedPreset | null>(null);
+const shareFolder = ref<PresetFolder | null>(null);
 
-function openShareDialog(preset?: ExtendedPreset) {
+function openShareDialog(preset?: ExtendedPreset, folder?: PresetFolder) {
   shareSinglePreset.value = preset || null;
+  shareFolder.value = folder || null;
   shareTab.value = 'create';
   shareResultCode.value = '';
   shareImportCode.value = '';
@@ -338,6 +350,10 @@ function openShareDialog(preset?: ExtendedPreset) {
 
 function handleShare(preset: ExtendedPreset) {
   openShareDialog(preset);
+}
+
+function handleShareFolder(folder: PresetFolder) {
+  openShareDialog(undefined, folder);
 }
 
 async function generateShareCode() {
@@ -349,6 +365,33 @@ async function generateShareCode() {
     if (shareSinglePreset.value) {
       data = shareSinglePreset.value;
       type = 'single';
+    } else if (shareFolder.value) {
+      // Find all presets in this folder and its subfolders? 
+      // User likely just wants this folder and its direct contents, OR the whole tree.
+      // Simplest is recursive export of folder + subfolders + presets inside them.
+      
+      const folderIds = new Set<string>();
+      const foldersToExport: PresetFolder[] = [];
+      
+      const collectFolders = (id: string) => {
+        const folder = store.presetFolders.find(f => f.id === id);
+        if (folder) {
+          folderIds.add(id);
+          foldersToExport.push(folder);
+          // Find subfolders
+          store.presetFolders.filter(f => f.parentId === id).forEach(f => collectFolders(f.id));
+        }
+      };
+      
+      collectFolders(shareFolder.value.id);
+      
+      const presetsToExport = store.extendedPresets.filter(p => p.folderId && folderIds.has(p.folderId));
+      
+      data = {
+        presetFolders: foldersToExport,
+        extendedPresets: presetsToExport
+      };
+      type = 'folder';
     } else {
       const jsonString = store.exportPresetsToJson();
       try {
@@ -594,6 +637,7 @@ function closeShareDialog() {
   shareResultCode.value = '';
   shareImportCode.value = '';
   shareSinglePreset.value = null;
+  shareFolder.value = null;
 }
 
 // Helpers
@@ -648,12 +692,14 @@ onMounted(() => {
         :expanded-ids="expandedFolderIds"
         :all-count="allPresetsCount"
         :uncategorized-count="uncategorizedCount"
+        :favorites-count="favoritesCount"
         @update:selected-folder-id="handleFolderSelect"
         @toggle-expand="handleToggleExpand"
         @create-folder="createFolder()"
         @create-sub-folder="createFolder"
         @edit-folder="editFolder"
         @delete-folder="deleteFolder"
+        @share-folder="handleShareFolder"
       />
     </div>
 
@@ -721,14 +767,15 @@ onMounted(() => {
 
       <div class="pm-content-area">
         <PresetList
-          :presets="filteredPresets"
-          :search-query="searchQuery"
-          @apply="applyPreset"
-          @edit="editPreset"
-          @delete="deletePreset"
-          @copy="copyPresetContent"
-          @share="handleShare"
-        />
+            :presets="filteredPresets"
+            :search-query="searchQuery"
+            @apply="applyPreset"
+            @edit="editPreset"
+            @delete="deletePreset"
+            @copy="copyPresetContent"
+            @share="handleShare"
+            @toggle-favorite="toggleFavorite"
+          />
       </div>
     </div>
 
@@ -866,6 +913,9 @@ onMounted(() => {
             <div class="share-info">
               <p v-if="shareSinglePreset">
                 正在分享预设: <strong>{{ shareSinglePreset.name }}</strong>
+              </p>
+              <p v-else-if="shareFolder">
+                正在分享文件夹: <strong>{{ shareFolder.name }}</strong>
               </p>
               <p v-else>
                 正在分享: <strong>所有预设数据</strong>
