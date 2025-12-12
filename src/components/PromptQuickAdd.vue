@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { PromptTag } from '../types';
 
@@ -13,6 +13,32 @@ const currentCategory = computed(() => store.currentCategory);
 const currentGroup = computed(() => store.currentGroup);
 const filteredTags = computed(() => store.filteredTags);
 const selectedLang = computed(() => store.selectedLang);
+
+const PAGE_SIZE = 50;
+const visibleCount = ref(PAGE_SIZE);
+const tagsContainer = ref<HTMLElement | null>(null);
+
+const visibleTags = computed(() => {
+  return filteredTags.value.slice(0, visibleCount.value);
+});
+
+watch(() => filteredTags.value, () => {
+  visibleCount.value = PAGE_SIZE;
+  if (tagsContainer.value) {
+    tagsContainer.value.scrollTop = 0;
+  }
+});
+
+function onScroll() {
+  const el = tagsContainer.value;
+  if (!el) return;
+  // Simple infinite scroll trigger
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+    if (visibleCount.value < filteredTags.value.length) {
+      visibleCount.value += PAGE_SIZE;
+    }
+  }
+}
 
 function selectCategory(index: number) {
   store.selectCategory(index);
@@ -56,14 +82,17 @@ function displayTrans(tag: PromptTag) {
     </div>
 
     <!-- Tags -->
-    <div class="pqa-tags">
-      <button v-for="tag in filteredTags" :key="tag.key" class="pqa-tag" @click="onTagClick(tag)" @mousedown.prevent
+    <div class="pqa-tags" ref="tagsContainer" @scroll="onScroll">
+      <button v-for="tag in visibleTags" :key="tag.key" class="pqa-tag" @click="onTagClick(tag)" @mousedown.prevent
         :title="tag.key">
         <span class="pqa-tag-text">{{ displayTrans(tag) }}</span>
         <span class="pqa-tag-sub" v-if="displayTrans(tag) !== tag.key">{{ tag.key }}</span>
       </button>
       <div v-if="filteredTags.length === 0" class="pqa-empty">
         无相关提示词
+      </div>
+      <div v-if="visibleCount < filteredTags.length" class="pqa-loading-more">
+        ...
       </div>
     </div>
   </div>
@@ -234,5 +263,13 @@ function displayTrans(tag: PromptTag) {
   color: var(--color-text-tertiary);
   font-size: 0.8rem;
   padding: 2rem;
+}
+
+.pqa-loading-more {
+  width: 100%;
+  text-align: center;
+  color: var(--color-text-tertiary);
+  padding: 0.5rem;
+  font-size: 0.8rem;
 }
 </style>

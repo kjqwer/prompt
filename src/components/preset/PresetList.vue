@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import type { ExtendedPreset, PresetType } from '../../types';
+import IconPresetType from '../icons/IconPresetType.vue';
 
 const props = defineProps<{
   presets: ExtendedPreset[];
@@ -16,17 +17,73 @@ const emit = defineEmits<{
   (e: 'toggle-favorite', preset: ExtendedPreset): void;
 }>();
 
-function getTypeIcon(type: PresetType) {
-  const icons: Record<string, string> = {
-    positive: '🪄',
-    negative: '⛔',
-    setting: '⚙️',
-    style: '🖌️',
-    character: '🧙',
-    scene: '🏞️',
-    custom: '🧩'
-  };
-  return icons[type] || '🧩';
+// Lazy Loading Logic
+const PAGE_SIZE = 20;
+const displayLimit = ref(PAGE_SIZE);
+const containerRef = ref<HTMLElement | null>(null);
+const sentinelRef = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
+
+const displayedPresets = computed(() => {
+  return props.presets.slice(0, displayLimit.value);
+});
+
+watch(() => props.presets, () => {
+  displayLimit.value = PAGE_SIZE;
+  if (containerRef.value) {
+    containerRef.value.scrollTop = 0;
+  }
+  // Reset observer if needed, but the sentinel remains or is recreated
+  nextTick(() => {
+    checkIntersection();
+  });
+});
+
+function checkIntersection() {
+  if (observer && sentinelRef.value) {
+    // Re-observe just in case
+    observer.disconnect();
+    observer.observe(sentinelRef.value);
+  }
+}
+
+onMounted(() => {
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0] && entries[0].isIntersecting) {
+      loadMore();
+    }
+  }, {
+    root: containerRef.value,
+    rootMargin: '200px',
+    threshold: 0.1
+  });
+  
+  if (sentinelRef.value) {
+    observer.observe(sentinelRef.value);
+  }
+});
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+});
+
+// Watch sentinel ref changes (e.g. when switching from empty to having presets)
+watch(sentinelRef, (newEl) => {
+  if (observer) {
+    observer.disconnect();
+    if (newEl) {
+      observer.observe(newEl);
+    }
+  }
+});
+
+function loadMore() {
+  if (displayLimit.value < props.presets.length) {
+    displayLimit.value += PAGE_SIZE;
+  }
 }
 
 function getTypeLabel(type: PresetType) {
@@ -48,18 +105,19 @@ function formatDate(dateStr: string) {
 </script>
 
 <template>
-  <div class="preset-list-container">
+  <div class="preset-list-container" ref="containerRef">
     <div v-if="presets.length === 0" class="empty-state">
       <div class="empty-icon">📭</div>
       <p class="empty-text">暂无预设</p>
     </div>
 
-    <div v-else class="preset-grid">
-      <div v-for="preset in presets" :key="preset.id" class="preset-card">
-        <div class="card-header">
-          <div class="preset-type" :title="getTypeLabel(preset.type)">
-            {{ getTypeIcon(preset.type) }}
-          </div>
+    <template v-else>
+      <div class="preset-grid">
+        <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn">
+          <div class="card-header">
+            <div class="preset-type" :title="getTypeLabel(preset.type)">
+              <IconPresetType :type="preset.type" width="24" height="24" />
+            </div>
           <h4 class="preset-name" :title="preset.name">{{ preset.name }}</h4>
           <div class="preset-actions">
             <button @click="emit('toggle-favorite', preset)" class="action-btn" :class="{ 'is-favorite': preset.isFavorite }" title="收藏">
@@ -132,6 +190,8 @@ function formatDate(dateStr: string) {
         </div>
       </div>
     </div>
+    <div ref="sentinelRef" class="sentinel" style="height: 20px; width: 100%;"></div>
+  </template>
   </div>
 </template>
 
@@ -168,11 +228,13 @@ function formatDate(dateStr: string) {
   background-color: var(--color-bg-primary);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 1rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   transition: all 0.2s ease;
   position: relative;
+  text-align: left;
 }
 
 .preset-card:hover {
@@ -189,8 +251,11 @@ function formatDate(dateStr: string) {
 
 .preset-type {
   font-size: 1.25rem;
-  margin-right: 0.75rem;
+  margin-right: 0.5rem;
   flex-shrink: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
 .preset-name {
