@@ -33,18 +33,27 @@ watch(() => props.modelValue, (newVal) => {
 }, { immediate: true });
 
 function expandToId(id: string) {
-  // Find path to this id
-  // Since we don't have parent pointers easily available without traversal, 
-  // we can rely on the fact that we want to ensure parents are expanded.
-  // A simple way is to traverse the tree.
-  // Or, we can just search in flattened list if it had parentId info?
-  // The flattened list in PresetManager has `label` which is path, but maybe not direct parent chain.
-  // Let's just do a simple tree search if needed.
-  
-  // Actually, let's just rely on user expanding, OR simple search.
-  // For now, let's not overengineer auto-expansion unless requested.
-  // Wait, if I select a deep folder, I expect to see it if I open the dropdown again?
-  // Maybe just keep `expandedIds` persistent.
+  if (!id) return;
+
+  const findPath = (nodes: any[], targetId: string, path: string[]): string[] | null => {
+    for (const node of nodes) {
+      if (node.id === targetId) {
+        return path;
+      }
+      if (node.children && node.children.length) {
+        const found = findPath(node.children, targetId, [...path, node.id]);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const parents = findPath(props.tree, id, []);
+  if (parents && parents.length) {
+    const newSet = new Set(expandedIds.value);
+    parents.forEach(pid => newSet.add(pid));
+    expandedIds.value = newSet;
+  }
 }
 
 function toggleDropdown() {
@@ -182,7 +191,6 @@ onUnmounted(() => {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  right: 0;
   z-index: 100;
   background-color: var(--color-bg-primary);
   border: 1px solid var(--color-border);
@@ -190,8 +198,11 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   max-height: 300px;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  overflow-x: auto;
+  display: block;
+  min-width: 260px;
+  width: max-content;
+  max-width: 400px;
 }
 
 .root-option {
@@ -202,6 +213,10 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--color-border);
   cursor: pointer;
   color: var(--color-text-secondary);
+  white-space: nowrap;
+  min-width: 100%;
+  width: max-content;
+  box-sizing: border-box;
 }
 
 .root-option:hover {
@@ -216,6 +231,9 @@ onUnmounted(() => {
 
 .tree-container {
   padding: 0.25rem 0;
+  min-width: 100%;
+  width: max-content;
+  box-sizing: border-box;
 }
 
 .icon-root, .icon-folder {

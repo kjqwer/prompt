@@ -91,10 +91,16 @@ function handleSelect() {
   display: flex;
   align-items: center;
   padding: 0.5rem 0.75rem;
+  padding-right: 1rem;
   cursor: pointer;
   color: var(--color-text-primary);
   transition: background-color 0.1s ease;
   user-select: none;
+  white-space: nowrap;
+}
+
+.folder-name {
+  margin-left: 0.5rem;
 }
 
 .item-row:hover {
