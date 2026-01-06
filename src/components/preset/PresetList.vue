@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { ExtendedPreset, PresetType } from '../../types';
 import IconPresetType from '../icons/IconPresetType.vue';
+import IconArrowLeft from '../icons/IconArrowLeft.vue';
+import IconArrowRight from '../icons/IconArrowRight.vue';
 
 const props = defineProps<{
   presets: ExtendedPreset[];
@@ -17,72 +19,31 @@ const emit = defineEmits<{
   (e: 'toggle-favorite', preset: ExtendedPreset): void;
 }>();
 
-// Lazy Loading Logic
-const PAGE_SIZE = 20;
-const displayLimit = ref(PAGE_SIZE);
+// Pagination Logic
+const PAGE_SIZE = 24;
+const currentPage = ref(1);
 const containerRef = ref<HTMLElement | null>(null);
-const sentinelRef = ref<HTMLElement | null>(null);
-let observer: IntersectionObserver | null = null;
+
+const totalPages = computed(() => Math.ceil(props.presets.length / PAGE_SIZE));
 
 const displayedPresets = computed(() => {
-  return props.presets.slice(0, displayLimit.value);
+  const start = (currentPage.value - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  return props.presets.slice(start, end);
 });
 
 watch(() => props.presets, () => {
-  displayLimit.value = PAGE_SIZE;
+  currentPage.value = 1;
   if (containerRef.value) {
     containerRef.value.scrollTop = 0;
   }
-  // Reset observer if needed, but the sentinel remains or is recreated
-  nextTick(() => {
-    checkIntersection();
-  });
 });
 
-function checkIntersection() {
-  if (observer && sentinelRef.value) {
-    // Re-observe just in case
-    observer.disconnect();
-    observer.observe(sentinelRef.value);
-  }
-}
-
-onMounted(() => {
-  observer = new IntersectionObserver((entries) => {
-    if (entries[0] && entries[0].isIntersecting) {
-      loadMore();
-    }
-  }, {
-    root: containerRef.value,
-    rootMargin: '200px',
-    threshold: 0.1
-  });
-  
-  if (sentinelRef.value) {
-    observer.observe(sentinelRef.value);
-  }
-});
-
-onUnmounted(() => {
-  if (observer) {
-    observer.disconnect();
-    observer = null;
-  }
-});
-
-// Watch sentinel ref changes (e.g. when switching from empty to having presets)
-watch(sentinelRef, (newEl) => {
-  if (observer) {
-    observer.disconnect();
-    if (newEl) {
-      observer.observe(newEl);
-    }
-  }
-});
-
-function loadMore() {
-  if (displayLimit.value < props.presets.length) {
-    displayLimit.value += PAGE_SIZE;
+function changePage(page: number) {
+  if (page < 1 || page > totalPages.value) return;
+  currentPage.value = page;
+  if (containerRef.value) {
+    containerRef.value.scrollTop = 0;
   }
 }
 
@@ -190,7 +151,29 @@ function formatDate(dateStr: string) {
         </div>
       </div>
     </div>
-    <div ref="sentinelRef" class="sentinel" style="height: 20px; width: 100%;"></div>
+    
+    <div v-if="totalPages > 1" class="pagination-controls">
+      <button 
+        :disabled="currentPage === 1" 
+        @click="changePage(currentPage - 1)"
+        class="page-btn nav-btn prev-page"
+      >
+        <IconArrowLeft width="16" height="16" />
+      </button>
+      
+      <div class="page-numbers">
+        <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+        <span class="total-count">({{ presets.length }} 个预设)</span>
+      </div>
+      
+      <button 
+        :disabled="currentPage === totalPages" 
+        @click="changePage(currentPage + 1)"
+        class="page-btn nav-btn next-page"
+      >
+        <IconArrowRight width="16" height="16" />
+      </button>
+    </div>
   </template>
   </div>
 </template>
@@ -201,9 +184,12 @@ function formatDate(dateStr: string) {
   height: 100%;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
 }
 
 .empty-state {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -450,5 +436,66 @@ function formatDate(dateStr: string) {
   background-color: var(--color-bg-tertiary);
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-sm);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 0 0.5rem 0;
+  gap: 1rem;
+  margin-top: auto;
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-hover);
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--color-bg-primary);
+}
+
+.page-numbers {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.page-info {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.total-count {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+.prev-page:hover:not(:disabled) :deep(.arrow-path) {
+  transform: translateX(-4px) scale(1.15);
+}
+
+.next-page:hover:not(:disabled) :deep(.arrow-path) {
+  transform: translateX(4px) scale(1.15);
 }
 </style>
