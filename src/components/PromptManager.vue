@@ -243,7 +243,7 @@ function resetDefault() {
         </div>
 
         <div v-else class="pm-tags-wrapper">
-          <TransitionGroup name="list" tag="ul" class="pm-tags-list">
+          <TransitionGroup name="list" tag="ul" class="pm-tags-list" :css="!isSearching">
             <li v-for="(t, ti) in filteredTags" :key="t.key + '_' + ti" 
               class="pm-tag-item"
               :draggable="!isSearching" 
@@ -252,7 +252,8 @@ function resetDefault() {
               @drop="onDrop(ti)"
               :class="{ 
                 hidden: t.hidden, 
-                'pm-dragging-over': ti === overIndex 
+                'pm-dragging-over': ti === overIndex,
+                'pm-tag-item-searching': isSearching
               }">
               
               <div class="pm-tag-handle" title="拖拽排序" v-if="!isSearching">
@@ -620,6 +621,7 @@ function resetDefault() {
   margin: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   position: relative; /* 确保列表项 absolute 定位相对于列表容器 */
 }
@@ -635,6 +637,10 @@ function resetDefault() {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
+}
+
+.pm-tag-item.pm-tag-item-searching {
+  grid-template-columns: 1fr auto;
 }
 
 .pm-tag-item:hover {
@@ -676,6 +682,7 @@ function resetDefault() {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  min-width: 0;
 }
 
 .pm-input-group {
