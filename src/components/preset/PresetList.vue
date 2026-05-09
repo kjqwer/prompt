@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { ExtendedPreset, PresetType } from '../../types';
 import IconPresetType from '../icons/IconPresetType.vue';
 import IconArrowLeft from '../icons/IconArrowLeft.vue';
@@ -122,6 +122,41 @@ function cleanupDragState() {
   dropSide.value = null;
 }
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  );
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (totalPages.value <= 1) return;
+  if (isTypingTarget(event.target)) return;
+
+  if (event.key === 'PageDown') {
+    event.preventDefault();
+    changePage(currentPage.value + 1);
+    return;
+  }
+
+  if (event.key === 'PageUp') {
+    event.preventDefault();
+    changePage(currentPage.value - 1);
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+});
+
 function getTypeLabel(type: PresetType) {
   const labels: Record<string, string> = {
     positive: '正面',
@@ -148,6 +183,31 @@ function formatDate(dateStr: string) {
     </div>
 
     <template v-else>
+      <div v-if="totalPages > 1" class="pagination-controls pagination-top">
+        <button 
+          :disabled="currentPage === 1" 
+          @click="changePage(currentPage - 1)"
+          class="page-btn nav-btn prev-page"
+          title="上一页 (PageUp)"
+        >
+          <IconArrowLeft width="16" height="16" />
+        </button>
+        
+        <div class="page-numbers">
+          <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+          <span class="total-count">PageUp / PageDown</span>
+        </div>
+        
+        <button 
+          :disabled="currentPage === totalPages" 
+          @click="changePage(currentPage + 1)"
+          class="page-btn nav-btn next-page"
+          title="下一页 (PageDown)"
+        >
+          <IconArrowRight width="16" height="16" />
+        </button>
+      </div>
+
       <div class="preset-grid">
         <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn" draggable="true"
           :class="{
@@ -239,6 +299,7 @@ function formatDate(dateStr: string) {
         :disabled="currentPage === 1" 
         @click="changePage(currentPage - 1)"
         class="page-btn nav-btn prev-page"
+        title="上一页 (PageUp)"
       >
         <IconArrowLeft width="16" height="16" />
       </button>
@@ -252,6 +313,7 @@ function formatDate(dateStr: string) {
         :disabled="currentPage === totalPages" 
         @click="changePage(currentPage + 1)"
         class="page-btn nav-btn next-page"
+        title="下一页 (PageDown)"
       >
         <IconArrowRight width="16" height="16" />
       </button>
@@ -541,6 +603,17 @@ function formatDate(dateStr: string) {
   padding: 1.5rem 0 0.5rem 0;
   gap: 1rem;
   margin-top: auto;
+}
+
+.pagination-top {
+  position: sticky;
+  top: -1rem;
+  z-index: 5;
+  margin: -1rem -1rem 1rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--color-bg-primary) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .page-btn {
