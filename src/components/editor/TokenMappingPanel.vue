@@ -23,6 +23,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:viewMode': [value: 'compact' | 'detail'];
   'pointer-down': [index: number, event: PointerEvent];
+  'panel-dragover': [event: DragEvent];
+  'panel-dragleave': [event: DragEvent];
+  'drop-tag': [event: DragEvent];
   'begin-edit': [index: number];
   'commit-edit': [value: string];
   'cancel-edit': [];
@@ -194,7 +197,9 @@ defineExpose({
       </div>
     </div>
     
-    <div class="pe-drag-container" ref="dragContainer" :class="{ 'is-dragging': isDragging }">
+    <div class="pe-drag-container" ref="dragContainer" :class="{ 'is-dragging': isDragging }"
+      @dragover="emit('panel-dragover', $event)" @dragleave="emit('panel-dragleave', $event)"
+      @drop="emit('drop-tag', $event)">
     <!-- 精简视图 -->
     <div class="pe-tokens-compact" v-if="viewMode === 'compact'">
       <div

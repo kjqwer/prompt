@@ -22,6 +22,8 @@ const emit = defineEmits<{
   'unify-priority': [];
   'toggle-underscore': [];
   'add-tag': [tag: string];
+  'drag-tag-start': [tag: string];
+  'drag-tag-end': [];
 }>();
 
 const inputEl = ref<HTMLTextAreaElement | null>(null);
@@ -230,7 +232,11 @@ defineExpose({
         @click="applySuggestion(s)"
       >{{ s }}</li>
     </ul>
-    <PromptQuickAdd @add-tag="(tag) => emit('add-tag', tag)" />
+    <PromptQuickAdd
+      @add-tag="(tag) => emit('add-tag', tag)"
+      @drag-tag-start="(tag) => emit('drag-tag-start', tag)"
+      @drag-tag-end="() => emit('drag-tag-end')"
+    />
   </section>
 </template>
 

@@ -13,6 +13,7 @@ const draggingIndex = ref<number | null>(null);
 const overIndex = ref<number | null>(null);
 const dragPreview = ref<HTMLElement | null>(null);
 const isDragging = ref(false);
+const externalDraggingTag = ref<string | null>(null);
 // 指针拖拽新增状态
 const insertSide = ref<'before' | 'after' | null>(null);
 const pointerId = ref<number | null>(null);
@@ -449,6 +450,28 @@ function getTokenWrapperInfo(token: string) {
   return store.getTokenWrapperInfo(token);
 }
 
+function cacheTokenRects() {
+  const dragContainer = tokenMappingRef.value?.dragContainer;
+  if (!dragContainer) {
+    cachedTokenRects.value = [];
+    return;
+  }
+  const selector = viewMode.value === 'compact' ? '.pe-token-compact' : '.pe-token-detail';
+  const elements = dragContainer.querySelectorAll(selector);
+  cachedTokenRects.value = Array.from(elements).map(el => {
+    const htmlEl = el as HTMLElement;
+    const idx = parseInt(htmlEl.getAttribute('data-index') || '-1', 10);
+    return {
+      index: idx,
+      left: htmlEl.offsetLeft,
+      top: htmlEl.offsetTop,
+      width: htmlEl.offsetWidth,
+      height: htmlEl.offsetHeight,
+      midX: htmlEl.offsetLeft + htmlEl.offsetWidth / 2
+    };
+  }).filter(item => item.index !== -1);
+}
+
 // 指针事件版拖拽：更高性能且可自定义插入指示
 function onPointerDown(index: number, e: PointerEvent) {
   if (editingIndex.value === index) return;
@@ -469,23 +492,7 @@ function onPointerDown(index: number, e: PointerEvent) {
   insertSide.value = null;
 
   // 缓存所有 Token 的位置信息 (相对于 dragContainer)
-  const dragContainer = tokenMappingRef.value?.dragContainer;
-  if (dragContainer) {
-    const selector = viewMode.value === 'compact' ? '.pe-token-compact' : '.pe-token-detail';
-    const elements = dragContainer.querySelectorAll(selector);
-    cachedTokenRects.value = Array.from(elements).map(el => {
-      const htmlEl = el as HTMLElement;
-      const idx = parseInt(htmlEl.getAttribute('data-index') || '-1', 10);
-      return {
-        index: idx,
-        left: htmlEl.offsetLeft,
-        top: htmlEl.offsetTop,
-        width: htmlEl.offsetWidth,
-        height: htmlEl.offsetHeight,
-        midX: htmlEl.offsetLeft + htmlEl.offsetWidth / 2
-      };
-    }).filter(item => item.index !== -1);
-  }
+  cacheTokenRects();
 
   // 监听全局移动与抬起
   window.addEventListener('pointermove', handlePointerMove);
@@ -513,7 +520,7 @@ function handlePointerMove(e: PointerEvent) {
   if (rafId) return;
   rafId = requestAnimationFrame(() => {
     positionPreview(lastX.value, lastY.value);
-    updateOverIndexAndSideFast(lastX.value, lastY.value);
+    updateOverIndexAndSideFast(lastX.value, lastY.value, draggingIndex.value);
     rafId = null;
   });
 }
@@ -587,7 +594,7 @@ function positionPreview(x: number, y: number) {
   dragPreview.value.style.transform = `translate(${x - dragOffsetX.value}px, ${y - dragOffsetY.value}px)`;
 }
 
-function updateOverIndexAndSideFast(clientX: number, clientY: number) {
+function updateOverIndexAndSideFast(clientX: number, clientY: number, activeDraggingIndex: number | null = null) {
   const dragContainer = tokenMappingRef.value?.dragContainer;
   if (!dragContainer) return;
 
@@ -596,21 +603,141 @@ function updateOverIndexAndSideFast(clientX: number, clientY: number) {
   const relX = clientX - containerRect.left;
   const relY = clientY - containerRect.top;
 
-  // 在缓存中查找命中的 Token
-  // 简单碰撞检测
-  const target = cachedTokenRects.value.find(item =>
-    relX >= item.left && relX <= item.left + item.width &&
-    relY >= item.top && relY <= item.top + item.height
-  );
-
-  if (!target || target.index === draggingIndex.value) {
+  const candidates = cachedTokenRects.value.filter(item => item.index !== activeDraggingIndex);
+  if (!candidates.length) {
     overIndex.value = null;
     insertSide.value = null;
     return;
   }
 
-  overIndex.value = target.index;
-  insertSide.value = relX < target.midX ? 'before' : 'after';
+  // 优先使用命中检测，鼠标落在 token 上时更准确
+  const target = candidates.find(item =>
+    relX >= item.left && relX <= item.left + item.width &&
+    relY >= item.top && relY <= item.top + item.height
+  );
+
+  if (target) {
+    overIndex.value = target.index;
+    insertSide.value = relX < target.midX ? 'before' : 'after';
+    return;
+  }
+
+  // 命中空隙时，选择同一行或最近的一项，支持任意位置插入
+  let nearest: typeof candidates[number] | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const item of candidates) {
+    const dx = relX - item.midX;
+    const dy =
+      relY < item.top ? item.top - relY :
+      relY > item.top + item.height ? relY - (item.top + item.height) :
+      0;
+    const score = Math.abs(dx) + dy * 4;
+    if (score < bestScore) {
+      bestScore = score;
+      nearest = item;
+    }
+  }
+
+  if (!nearest) {
+    overIndex.value = null;
+    insertSide.value = null;
+    return;
+  }
+
+  overIndex.value = nearest.index;
+  insertSide.value = relX < nearest.midX ? 'before' : 'after';
+}
+
+function isQuickAddDragEvent(event: DragEvent): boolean {
+  const types = Array.from(event.dataTransfer?.types ?? []);
+  return types.includes('application/x-prompt-tag') || types.includes('text/plain');
+}
+
+function cleanupExternalDrag() {
+  externalDraggingTag.value = null;
+  cachedTokenRects.value = [];
+  overIndex.value = null;
+  insertSide.value = null;
+  if (draggingIndex.value == null) {
+    isDragging.value = false;
+  }
+}
+
+function handleQuickAddDragStart(tag: string) {
+  externalDraggingTag.value = tag;
+  isDragging.value = true;
+  overIndex.value = null;
+  insertSide.value = null;
+  cacheTokenRects();
+}
+
+function handleQuickAddDragEnd() {
+  cleanupExternalDrag();
+}
+
+function handlePanelDragOver(event: DragEvent) {
+  if (!isQuickAddDragEvent(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy';
+  }
+  if (!externalDraggingTag.value) {
+    externalDraggingTag.value =
+      event.dataTransfer?.getData('application/x-prompt-tag') ||
+      event.dataTransfer?.getData('text/plain') ||
+      null;
+  }
+  isDragging.value = true;
+  if (!cachedTokenRects.value.length && tokens.value.length) {
+    cacheTokenRects();
+  }
+  updateOverIndexAndSideFast(event.clientX, event.clientY, null);
+}
+
+function handlePanelDragLeave(event: DragEvent) {
+  if (!externalDraggingTag.value) return;
+  const dragContainer = tokenMappingRef.value?.dragContainer;
+  if (!dragContainer) return;
+  const related = event.relatedTarget as Node | null;
+  if (related && dragContainer.contains(related)) return;
+  const rect = dragContainer.getBoundingClientRect();
+  const inside =
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom;
+  if (!inside) {
+    overIndex.value = null;
+    insertSide.value = null;
+  }
+}
+
+function insertTagIntoTokens(tag: string, targetIndex: number | null, side: 'before' | 'after' | null) {
+  const list = splitTokensLocal(text.value);
+  let insertAt = list.length;
+  if (targetIndex != null && side) {
+    insertAt = targetIndex + (side === 'after' ? 1 : 0);
+  }
+  insertAt = Math.max(0, Math.min(insertAt, list.length));
+  list.splice(insertAt, 0, normalizeToken(tag));
+  applyFullPrompt(list.join(', '));
+  showNotification('已插入提示词', 'success');
+}
+
+function handlePanelDropTag(event: DragEvent) {
+  if (!isQuickAddDragEvent(event)) return;
+  event.preventDefault();
+  const tag =
+    externalDraggingTag.value ||
+    event.dataTransfer?.getData('application/x-prompt-tag') ||
+    event.dataTransfer?.getData('text/plain') ||
+    '';
+  if (!tag) {
+    cleanupExternalDrag();
+    return;
+  }
+  insertTagIntoTokens(tag, overIndex.value, insertSide.value);
+  cleanupExternalDrag();
 }
 
 function commitEdit(value: string) {
@@ -740,14 +867,15 @@ function isRemoveDisabled(token: string): boolean {
         :get-suggestions="(prefix, limit) => store.getSuggestions(prefix, limit)"
         @update-suggestions="updateSuggestionsFromText" @copy="copyLeft" @replace-cn-comma="replaceCnComma"
         @format-prompt="formatPrompt" @unify-priority="unifyPriorityStyle" @toggle-underscore="toggleUnderscoreSpace"
-        @add-tag="handleAddTag" />
+        @add-tag="handleAddTag" @drag-tag-start="handleQuickAddDragStart" @drag-tag-end="handleQuickAddDragEnd" />
 
       <TokenMappingPanel ref="tokenMappingRef" :tokens="tokens" :selected-lang="selectedLang"
         v-model:view-mode="viewMode" :dragging-index="draggingIndex" :over-index="overIndex" :insert-side="insertSide"
         :is-dragging="isDragging" :edit-suggestions="editSuggestions" :priority-style="priorityStyle"
         :display-trans="displayTrans" :is-unmapped="isUnmapped" :get-token-wrapper-info="getTokenWrapperInfo"
         :has-weight-suffix="hasWeightSuffix" :get-suggestions="(prefix, limit) => store.getSuggestions(prefix, limit)"
-        @pointer-down="onPointerDown" @begin-edit="(i) => editingIndex = i" @commit-edit="commitEdit"
+        @pointer-down="onPointerDown" @panel-dragover="handlePanelDragOver" @panel-dragleave="handlePanelDragLeave"
+        @drop-tag="handlePanelDropTag" @begin-edit="(i) => editingIndex = i" @commit-edit="commitEdit"
         @cancel-edit="() => editingIndex = null" @show-add-map="showAddMap" @add-wrapper="addWrapperToToken"
         @remove-wrapper="removeWrapperFromToken" @remove-token="removeToken" @add-token-after="addTokenAfter"
         @show-translation-popup="() => { translationTargetToken = null; showTranslationPopup = true; }"

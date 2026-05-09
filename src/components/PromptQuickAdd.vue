@@ -5,6 +5,8 @@ import type { PromptTag } from '../types';
 
 const emit = defineEmits<{
   (e: 'add-tag', tag: string): void
+  (e: 'drag-tag-start', tag: string): void
+  (e: 'drag-tag-end'): void
 }>();
 
 const store = usePromptStore();
@@ -17,6 +19,7 @@ const selectedLang = computed(() => store.selectedLang);
 const PAGE_SIZE = 50;
 const visibleCount = ref(PAGE_SIZE);
 const tagsContainer = ref<HTMLElement | null>(null);
+const draggedTagKey = ref<string | null>(null);
 
 const visibleTags = computed(() => {
   return filteredTags.value.slice(0, visibleCount.value);
@@ -49,7 +52,24 @@ function selectGroup(index: number) {
 }
 
 function onTagClick(tag: PromptTag) {
+  if (draggedTagKey.value === tag.key) return;
   emit('add-tag', tag.key);
+}
+
+function onTagDragStart(tag: PromptTag, event: DragEvent) {
+  if (!event.dataTransfer) return;
+  draggedTagKey.value = tag.key;
+  event.dataTransfer.effectAllowed = 'copy';
+  event.dataTransfer.setData('text/plain', tag.key);
+  event.dataTransfer.setData('application/x-prompt-tag', tag.key);
+  emit('drag-tag-start', tag.key);
+}
+
+function onTagDragEnd() {
+  emit('drag-tag-end');
+  window.setTimeout(() => {
+    draggedTagKey.value = null;
+  }, 0);
 }
 
 function displayTrans(tag: PromptTag) {
@@ -83,7 +103,8 @@ function displayTrans(tag: PromptTag) {
 
     <!-- Tags -->
     <div class="pqa-tags" ref="tagsContainer" @scroll="onScroll">
-      <button v-for="tag in visibleTags" :key="tag.key" class="pqa-tag" @click="onTagClick(tag)" @mousedown.prevent
+      <button v-for="tag in visibleTags" :key="tag.key" class="pqa-tag" draggable="true" @click="onTagClick(tag)"
+        @dragstart="onTagDragStart(tag, $event)" @dragend="onTagDragEnd"
         :title="tag.key">
         <span class="pqa-tag-text">{{ displayTrans(tag) }}</span>
         <span class="pqa-tag-sub" v-if="displayTrans(tag) !== tag.key">{{ tag.key }}</span>
