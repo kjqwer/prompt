@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { ExtendedPreset, PresetFolder, PresetType } from '../types';
 import NotificationToast from './NotificationToast.vue';
@@ -9,6 +9,7 @@ import FolderSelector from './preset/FolderSelector.vue';
 import TypeSelector from './preset/TypeSelector.vue';
 
 const store = usePromptStore();
+const PRESET_MANAGER_VIEW_STATE_KEY = 'preset-manager-view-state';
 
 // State
 const activeTab = ref<'presets' | 'folders'>('presets'); // Kept for compatibility if needed, but UI will be unified
@@ -16,6 +17,9 @@ const selectedType = ref<PresetType | 'all'>('all');
 const searchQuery = ref('');
 const selectedFolderId = ref<string | null>(null);
 const expandedFolderIds = ref<Set<string>>(new Set());
+const presetSidebarRef = ref<InstanceType<typeof PresetSidebar> | null>(null);
+const presetListRef = ref<InstanceType<typeof PresetList> | null>(null);
+const isRestoringViewState = ref(false);
 
 // Dialog State
 const showMobileSidebar = ref(false);
@@ -88,7 +92,7 @@ const filterOptions = computed<{ value: PresetType | 'all'; label: string }[]>((
 ]);
 
 const filteredPresets = computed(() => {
-  let presets = store.extendedPresets || [];
+  let presets = [...(store.extendedPresets || [])];
   
   // Filter by Type
   if (selectedType.value !== 'all') {
@@ -117,8 +121,19 @@ const filteredPresets = computed(() => {
     );
   }
   
-  return presets.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  return presets.sort((a, b) => {
+    const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.POSITIVE_INFINITY;
+    const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.POSITIVE_INFINITY;
+    if (ao !== bo) return ao - bo;
+    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  });
 });
+
+const presetListResetKey = computed(() => JSON.stringify({
+  selectedType: selectedType.value,
+  searchQuery: searchQuery.value,
+  selectedFolderId: selectedFolderId.value,
+}));
 
 const flattenedFolders = computed(() => {
   type FlatItem = { id: string; name: string; label: string; level: number; presetCount: number; hasChildren: boolean };
@@ -146,6 +161,62 @@ const flattenedFolders = computed(() => {
 const allPresetsCount = computed(() => (store.extendedPresets || []).length);
 const uncategorizedCount = computed(() => (store.extendedPresets || []).filter(p => !p.folderId).length);
 const favoritesCount = computed(() => (store.extendedPresets || []).filter(p => p.isFavorite).length);
+
+function persistPresetManagerViewState() {
+  if (isRestoringViewState.value) return;
+  const payload = {
+    activeTab: activeTab.value,
+    selectedType: selectedType.value,
+    searchQuery: searchQuery.value,
+    selectedFolderId: selectedFolderId.value,
+    expandedFolderIds: Array.from(expandedFolderIds.value),
+    sidebarScrollTop: presetSidebarRef.value?.contentRef?.scrollTop ?? 0,
+    listScrollTop: presetListRef.value?.containerRef?.scrollTop ?? 0,
+    currentPage: presetListRef.value?.getCurrentPage?.() ?? 1,
+  };
+  window.sessionStorage.setItem(PRESET_MANAGER_VIEW_STATE_KEY, JSON.stringify(payload));
+}
+
+async function restorePresetManagerViewState() {
+  const raw = window.sessionStorage.getItem(PRESET_MANAGER_VIEW_STATE_KEY);
+  if (!raw) return;
+  try {
+    isRestoringViewState.value = true;
+    const state = JSON.parse(raw) as {
+      activeTab?: 'presets' | 'folders';
+      selectedType?: PresetType | 'all';
+      searchQuery?: string;
+      selectedFolderId?: string | null;
+      expandedFolderIds?: string[];
+      sidebarScrollTop?: number;
+      listScrollTop?: number;
+      currentPage?: number;
+    };
+    if (state.activeTab === 'presets' || state.activeTab === 'folders') {
+      activeTab.value = state.activeTab;
+    }
+    selectedType.value = state.selectedType ?? 'all';
+    searchQuery.value = state.searchQuery ?? '';
+    selectedFolderId.value = state.selectedFolderId ?? null;
+    expandedFolderIds.value = new Set(state.expandedFolderIds ?? []);
+    await nextTick();
+    if (typeof state.currentPage === 'number') {
+      presetListRef.value?.setCurrentPage?.(state.currentPage, false);
+    }
+    await nextTick();
+    if (presetSidebarRef.value?.contentRef) {
+      presetSidebarRef.value.contentRef.scrollTop = Math.max(0, state.sidebarScrollTop ?? 0);
+    }
+    if (presetListRef.value?.containerRef) {
+      presetListRef.value.containerRef.scrollTop = Math.max(0, state.listScrollTop ?? 0);
+    }
+  } catch {
+    // Ignore broken persisted state and continue with defaults.
+  } finally {
+    isRestoringViewState.value = false;
+    persistPresetManagerViewState();
+  }
+}
 
 // Actions
 function handleFolderSelect(id: string | null) {
@@ -275,6 +346,28 @@ function toggleFavorite(preset: ExtendedPreset) {
   store.updateExtendedPreset(preset.id, { isFavorite: !preset.isFavorite });
   if (!preset.isFavorite) {
     showNotification(`已添加到收藏`, 'success');
+  }
+}
+
+function handleReorderPresets(payload: { draggedId: string; targetId: string; side: 'before' | 'after' }) {
+  const visibleIds = filteredPresets.value.map(preset => preset.id);
+  const from = visibleIds.indexOf(payload.draggedId);
+  const target = visibleIds.indexOf(payload.targetId);
+  if (from === -1 || target === -1) return;
+  const reordered = [...visibleIds];
+  const [draggedId] = reordered.splice(from, 1);
+  if (!draggedId) return;
+  let insertAt = target;
+  if (payload.side === 'after') {
+    insertAt += from < target ? 0 : 1;
+  } else if (from < target) {
+    insertAt -= 1;
+  }
+  insertAt = Math.max(0, Math.min(insertAt, reordered.length));
+  reordered.splice(insertAt, 0, draggedId);
+  if (store.reorderExtendedPresets(reordered)) {
+    persistPresetManagerViewState();
+    showNotification('已调整预设顺序', 'success');
   }
 }
 
@@ -681,6 +774,26 @@ function closeFolderDialog() {
 
 onMounted(() => {
   store.initializeExtendedPresets();
+  nextTick(() => {
+    restorePresetManagerViewState();
+  });
+});
+
+watch(
+  () => [
+    activeTab.value,
+    selectedType.value,
+    searchQuery.value,
+    selectedFolderId.value,
+    Array.from(expandedFolderIds.value).sort().join('|'),
+  ],
+  () => {
+    persistPresetManagerViewState();
+  }
+);
+
+onBeforeUnmount(() => {
+  persistPresetManagerViewState();
 });
 </script>
 
@@ -693,6 +806,7 @@ onMounted(() => {
     <div class="pm-sidebar" :class="{ 'mobile-open': showMobileSidebar }">
       <button v-if="showMobileSidebar" class="mobile-sidebar-close" @click="showMobileSidebar = false">×</button>
       <PresetSidebar
+        ref="presetSidebarRef"
         :folder-tree="folderTree"
         :selected-folder-id="selectedFolderId"
         :expanded-ids="expandedFolderIds"
@@ -706,6 +820,7 @@ onMounted(() => {
         @edit-folder="editFolder"
         @delete-folder="deleteFolder"
         @share-folder="handleShareFolder"
+        @view-state-change="persistPresetManagerViewState"
       />
     </div>
 
@@ -771,20 +886,24 @@ onMounted(() => {
 
       <div class="pm-content-area">
         <PresetList
+            ref="presetListRef"
             :presets="filteredPresets"
             :search-query="searchQuery"
+            :reset-key="presetListResetKey"
             @apply="applyPreset"
             @edit="editPreset"
             @delete="deletePreset"
             @copy="copyPresetContent"
             @share="handleShare"
             @toggle-favorite="toggleFavorite"
+            @reorder="handleReorderPresets"
+            @view-state-change="persistPresetManagerViewState"
           />
       </div>
     </div>
 
     <!-- Create/Edit Preset Modal -->
-    <div v-if="showCreateDialog" class="modal-overlay" @click.self="closePresetDialog">
+    <div v-if="showCreateDialog" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
           <h3>{{ editingPreset ? '编辑预设' : '新建预设' }}</h3>

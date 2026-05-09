@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { usePromptStore } from '../stores/promptStore';
 import type { PromptTag } from '../types';
 
@@ -17,19 +17,23 @@ const filteredTags = computed(() => store.filteredTags);
 const selectedLang = computed(() => store.selectedLang);
 
 const PAGE_SIZE = 50;
+const QUICK_ADD_STATE_KEY = 'prompt-quick-add-view-state';
 const visibleCount = ref(PAGE_SIZE);
 const tagsContainer = ref<HTMLElement | null>(null);
 const draggedTagKey = ref<string | null>(null);
+const isRestoringState = ref(false);
 
 const visibleTags = computed(() => {
   return filteredTags.value.slice(0, visibleCount.value);
 });
 
 watch(() => filteredTags.value, () => {
+  if (isRestoringState.value) return;
   visibleCount.value = PAGE_SIZE;
   if (tagsContainer.value) {
     tagsContainer.value.scrollTop = 0;
   }
+  persistQuickAddState();
 });
 
 function onScroll() {
@@ -41,14 +45,17 @@ function onScroll() {
       visibleCount.value += PAGE_SIZE;
     }
   }
+  persistQuickAddState();
 }
 
 function selectCategory(index: number) {
   store.selectCategory(index);
+  persistQuickAddState();
 }
 
 function selectGroup(index: number) {
   store.selectGroup(index);
+  persistQuickAddState();
 }
 
 function onTagClick(tag: PromptTag) {
@@ -75,6 +82,63 @@ function onTagDragEnd() {
 function displayTrans(tag: PromptTag) {
   return tag.translation?.[selectedLang.value] ?? tag.key;
 }
+
+function persistQuickAddState() {
+  const payload = {
+    categoryIndex: store.selectedCategoryIndex,
+    groupIndex: store.selectedGroupIndex,
+    visibleCount: visibleCount.value,
+    scrollTop: tagsContainer.value?.scrollTop ?? 0,
+  };
+  window.sessionStorage.setItem(QUICK_ADD_STATE_KEY, JSON.stringify(payload));
+}
+
+async function restoreQuickAddState() {
+  const raw = window.sessionStorage.getItem(QUICK_ADD_STATE_KEY);
+  if (!raw) return;
+  try {
+    const state = JSON.parse(raw) as {
+      categoryIndex?: number;
+      groupIndex?: number;
+      visibleCount?: number;
+      scrollTop?: number;
+    };
+    isRestoringState.value = true;
+    const categoryCount = categories.value.length;
+    const nextCategoryIndex = Math.min(Math.max(state.categoryIndex ?? 0, 0), Math.max(categoryCount - 1, 0));
+    store.selectCategory(nextCategoryIndex);
+    const groupCount = currentCategory.value?.groups.length ?? 0;
+    const nextGroupIndex = Math.min(Math.max(state.groupIndex ?? 0, 0), Math.max(groupCount - 1, 0));
+    store.selectGroup(nextGroupIndex);
+    visibleCount.value = Math.max(PAGE_SIZE, state.visibleCount ?? PAGE_SIZE);
+    await nextTick();
+    if (tagsContainer.value) {
+      tagsContainer.value.scrollTop = Math.max(0, state.scrollTop ?? 0);
+    }
+  } catch {
+    // Ignore broken persisted state and continue with defaults.
+  } finally {
+    isRestoringState.value = false;
+    persistQuickAddState();
+  }
+}
+
+watch(
+  () => [store.selectedCategoryIndex, store.selectedGroupIndex, visibleCount.value],
+  () => {
+    if (!isRestoringState.value) {
+      persistQuickAddState();
+    }
+  }
+);
+
+onMounted(() => {
+  restoreQuickAddState();
+});
+
+onUnmounted(() => {
+  persistQuickAddState();
+});
 </script>
 
 <template>

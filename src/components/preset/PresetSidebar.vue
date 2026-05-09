@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import FolderTreeItem from './FolderTreeItem.vue';
 import type { PresetFolder } from '../../types';
 
@@ -25,11 +25,18 @@ const emit = defineEmits<{
   (e: 'edit-folder', folder: PresetFolder): void;
   (e: 'delete-folder', folder: PresetFolder): void;
   (e: 'share-folder', folder: PresetFolder): void;
+  (e: 'view-state-change'): void;
 }>();
 
 function selectFolder(id: string | null) {
   emit('update:selectedFolderId', id);
 }
+
+const contentRef = ref<HTMLElement | null>(null);
+
+defineExpose({
+  contentRef,
+});
 </script>
 
 <template>
@@ -45,7 +52,7 @@ function selectFolder(id: string | null) {
       </button>
     </div>
 
-    <div class="sidebar-content">
+    <div class="sidebar-content" ref="contentRef" @scroll="emit('view-state-change')">
       <!-- 固定选项 -->
       <div class="system-folders">
         <div 

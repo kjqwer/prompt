@@ -832,6 +832,20 @@ export const usePromptStore = defineStore('promptStore', {
           }
         };
       }
+
+      const normalized = [...this.extendedPresets].sort((a, b) => {
+        const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.POSITIVE_INFINITY;
+        const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.POSITIVE_INFINITY;
+        if (ao !== bo) return ao - bo;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+      let changed = false;
+      normalized.forEach((preset, index) => {
+        if (preset.sortOrder !== index) {
+          preset.sortOrder = index;
+          changed = true;
+        }
+      });
       
       // 确保有默认文件夹
       if (this.presetFolders.length === 0) {
@@ -845,15 +859,25 @@ export const usePromptStore = defineStore('promptStore', {
         if (this.presetManagement.settings) {
           this.presetManagement.settings.defaultFolder = defaultFolder.id;
         }
+        changed = true;
+      }
+
+      if (changed) {
+        this.save();
       }
     },
 
     createExtendedPreset(data: Omit<ExtendedPreset, 'id' | 'createdAt' | 'updatedAt'>) {
       const now = new Date().toISOString();
+      const nextSortOrder = this.extendedPresets.reduce((max, preset) => {
+        const value = typeof preset.sortOrder === 'number' ? preset.sortOrder : -1;
+        return Math.max(max, value);
+      }, -1) + 1;
       const preset: ExtendedPreset = {
         id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         createdAt: now,
         updatedAt: now,
+        sortOrder: nextSortOrder,
         ...data
       };
       
@@ -876,6 +900,41 @@ export const usePromptStore = defineStore('promptStore', {
       if (index === -1) return false;
       
       this.extendedPresets.splice(index, 1);
+      this.extendedPresets
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+        .forEach((preset, idx) => {
+          preset.sortOrder = idx;
+        });
+      this.save();
+      return true;
+    },
+
+    reorderExtendedPresets(orderedIds: string[]) {
+      if (!orderedIds.length) return false;
+      const idSet = new Set(orderedIds);
+      const ordered = [...this.extendedPresets].sort((a, b) => {
+        const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.POSITIVE_INFINITY;
+        const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.POSITIVE_INFINITY;
+        if (ao !== bo) return ao - bo;
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
+      const replacements = ordered.filter(preset => idSet.has(preset.id));
+      if (replacements.length !== orderedIds.length) return false;
+      const replacementMap = new Map(replacements.map(preset => [preset.id, preset]));
+      const reorderedVisible = orderedIds
+        .map(id => replacementMap.get(id))
+        .filter((preset): preset is ExtendedPreset => !!preset);
+
+      let visibleIndex = 0;
+      const merged = ordered.map(preset => {
+        if (!idSet.has(preset.id)) return preset;
+        const nextPreset = reorderedVisible[visibleIndex];
+        visibleIndex += 1;
+        return nextPreset ?? preset;
+      });
+      merged.forEach((preset, index2) => {
+        preset.sortOrder = index2;
+      });
       this.save();
       return true;
     },

@@ -8,6 +8,7 @@ import IconArrowRight from '../icons/IconArrowRight.vue';
 const props = defineProps<{
   presets: ExtendedPreset[];
   searchQuery: string;
+  resetKey: string;
 }>();
 
 const emit = defineEmits<{
@@ -17,12 +18,17 @@ const emit = defineEmits<{
   (e: 'copy', preset: ExtendedPreset): void;
   (e: 'share', preset: ExtendedPreset): void;
   (e: 'toggle-favorite', preset: ExtendedPreset): void;
+  (e: 'reorder', payload: { draggedId: string; targetId: string; side: 'before' | 'after' }): void;
+  (e: 'view-state-change'): void;
 }>();
 
 // Pagination Logic
 const PAGE_SIZE = 24;
 const currentPage = ref(1);
 const containerRef = ref<HTMLElement | null>(null);
+const draggingPresetId = ref<string | null>(null);
+const overPresetId = ref<string | null>(null);
+const dropSide = ref<'before' | 'after' | null>(null);
 
 const totalPages = computed(() => Math.ceil(props.presets.length / PAGE_SIZE));
 
@@ -32,10 +38,18 @@ const displayedPresets = computed(() => {
   return props.presets.slice(start, end);
 });
 
-watch(() => props.presets, () => {
+watch(() => props.resetKey, () => {
   currentPage.value = 1;
   if (containerRef.value) {
     containerRef.value.scrollTop = 0;
+  }
+  emit('view-state-change');
+});
+
+watch(() => props.presets.length, () => {
+  const fallbackMax = totalPages.value || 1;
+  if (currentPage.value > fallbackMax) {
+    currentPage.value = fallbackMax;
   }
 });
 
@@ -45,6 +59,67 @@ function changePage(page: number) {
   if (containerRef.value) {
     containerRef.value.scrollTop = 0;
   }
+  emit('view-state-change');
+}
+
+function setCurrentPage(page: number, resetScroll = false) {
+  const fallbackMax = totalPages.value || 1;
+  currentPage.value = Math.min(Math.max(page, 1), fallbackMax);
+  if (resetScroll && containerRef.value) {
+    containerRef.value.scrollTop = 0;
+  }
+}
+
+function getCurrentPage() {
+  return currentPage.value;
+}
+
+defineExpose({
+  containerRef,
+  setCurrentPage,
+  getCurrentPage,
+});
+
+function onDragStart(preset: ExtendedPreset, event: DragEvent) {
+  draggingPresetId.value = preset.id;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', preset.id);
+  }
+}
+
+function onDragOver(preset: ExtendedPreset, event: DragEvent) {
+  if (!draggingPresetId.value || draggingPresetId.value === preset.id) return;
+  event.preventDefault();
+  const target = event.currentTarget as HTMLElement | null;
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  const side = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  overPresetId.value = preset.id;
+  dropSide.value = side;
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onDrop(preset: ExtendedPreset, event: DragEvent) {
+  if (!draggingPresetId.value || draggingPresetId.value === preset.id || !dropSide.value) {
+    cleanupDragState();
+    return;
+  }
+  event.preventDefault();
+  emit('reorder', {
+    draggedId: draggingPresetId.value,
+    targetId: preset.id,
+    side: dropSide.value,
+  });
+  cleanupDragState();
+}
+
+function cleanupDragState() {
+  draggingPresetId.value = null;
+  overPresetId.value = null;
+  dropSide.value = null;
 }
 
 function getTypeLabel(type: PresetType) {
@@ -66,7 +141,7 @@ function formatDate(dateStr: string) {
 </script>
 
 <template>
-  <div class="preset-list-container" ref="containerRef">
+  <div class="preset-list-container" ref="containerRef" @scroll="emit('view-state-change')">
     <div v-if="presets.length === 0" class="empty-state">
       <div class="empty-icon">📭</div>
       <p class="empty-text">暂无预设</p>
@@ -74,7 +149,14 @@ function formatDate(dateStr: string) {
 
     <template v-else>
       <div class="preset-grid">
-        <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn">
+        <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn" draggable="true"
+          :class="{
+            dragging: draggingPresetId === preset.id,
+            'insert-before': overPresetId === preset.id && dropSide === 'before' && draggingPresetId !== preset.id,
+            'insert-after': overPresetId === preset.id && dropSide === 'after' && draggingPresetId !== preset.id
+          }"
+          @dragstart="onDragStart(preset, $event)" @dragover="onDragOver(preset, $event)"
+          @drop="onDrop(preset, $event)" @dragend="cleanupDragState">
           <div class="card-header">
             <div class="preset-type" :title="getTypeLabel(preset.type)">
               <IconPresetType :type="preset.type" width="24" height="24" />
@@ -221,12 +303,26 @@ function formatDate(dateStr: string) {
   transition: all 0.2s ease;
   position: relative;
   text-align: left;
+  cursor: grab;
 }
 
 .preset-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: var(--color-border-hover);
+}
+
+.preset-card.dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.preset-card.insert-before {
+  border-top: 3px solid var(--color-accent);
+}
+
+.preset-card.insert-after {
+  border-bottom: 3px solid var(--color-accent);
 }
 
 .card-header {

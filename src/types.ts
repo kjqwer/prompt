@@ -84,6 +84,7 @@ export interface ExtendedPreset {
   folderId?: string;
   createdAt: string;
   updatedAt: string;
+  sortOrder?: number;
   isPublic?: boolean;
   author?: string;
   isFavorite?: boolean;
