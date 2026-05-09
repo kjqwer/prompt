@@ -9,6 +9,7 @@ const props = defineProps<{
   presets: ExtendedPreset[];
   searchQuery: string;
   resetKey: string;
+  enableReorder?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -81,6 +82,10 @@ defineExpose({
 });
 
 function onDragStart(preset: ExtendedPreset, event: DragEvent) {
+  if (!props.enableReorder) {
+    event.preventDefault();
+    return;
+  }
   draggingPresetId.value = preset.id;
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move';
@@ -89,6 +94,7 @@ function onDragStart(preset: ExtendedPreset, event: DragEvent) {
 }
 
 function onDragOver(preset: ExtendedPreset, event: DragEvent) {
+  if (!props.enableReorder) return;
   if (!draggingPresetId.value || draggingPresetId.value === preset.id) return;
   event.preventDefault();
   const target = event.currentTarget as HTMLElement | null;
@@ -103,6 +109,10 @@ function onDragOver(preset: ExtendedPreset, event: DragEvent) {
 }
 
 function onDrop(preset: ExtendedPreset, event: DragEvent) {
+  if (!props.enableReorder) {
+    cleanupDragState();
+    return;
+  }
   if (!draggingPresetId.value || draggingPresetId.value === preset.id || !dropSide.value) {
     cleanupDragState();
     return;
@@ -209,11 +219,12 @@ function formatDate(dateStr: string) {
       </div>
 
       <div class="preset-grid">
-        <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn" draggable="true"
+        <div v-for="preset in displayedPresets" :key="preset.id" class="preset-card nav-btn" :draggable="!!enableReorder"
           :class="{
             dragging: draggingPresetId === preset.id,
             'insert-before': overPresetId === preset.id && dropSide === 'before' && draggingPresetId !== preset.id,
-            'insert-after': overPresetId === preset.id && dropSide === 'after' && draggingPresetId !== preset.id
+            'insert-after': overPresetId === preset.id && dropSide === 'after' && draggingPresetId !== preset.id,
+            'reorder-disabled': !enableReorder
           }"
           @dragstart="onDragStart(preset, $event)" @dragover="onDragOver(preset, $event)"
           @drop="onDrop(preset, $event)" @dragend="cleanupDragState">
@@ -377,6 +388,10 @@ function formatDate(dateStr: string) {
 .preset-card.dragging {
   opacity: 0.55;
   cursor: grabbing;
+}
+
+.preset-card.reorder-disabled {
+  cursor: default;
 }
 
 .preset-card.insert-before {

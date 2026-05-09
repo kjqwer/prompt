@@ -17,6 +17,8 @@ const selectedType = ref<PresetType | 'all'>('all');
 const searchQuery = ref('');
 const selectedFolderId = ref<string | null>(null);
 const expandedFolderIds = ref<Set<string>>(new Set());
+const sortField = ref<'custom' | 'name' | 'updatedAt'>('custom');
+const sortDirection = ref<'asc' | 'desc'>('asc');
 const presetSidebarRef = ref<InstanceType<typeof PresetSidebar> | null>(null);
 const presetListRef = ref<InstanceType<typeof PresetList> | null>(null);
 const isRestoringViewState = ref(false);
@@ -91,6 +93,24 @@ const filterOptions = computed<{ value: PresetType | 'all'; label: string }[]>((
   ...presetTypes
 ]);
 
+const sortOptions = [
+  { value: 'custom', label: '自定义排序' },
+  { value: 'name', label: '按名称' },
+  { value: 'updatedAt', label: '按时间' }
+] as const;
+
+const isCustomSort = computed(() => sortField.value === 'custom');
+
+const sortDirectionLabel = computed(() => {
+  if (sortField.value === 'name') {
+    return sortDirection.value === 'asc' ? '名称 A-Z' : '名称 Z-A';
+  }
+  if (sortField.value === 'updatedAt') {
+    return sortDirection.value === 'asc' ? '时间旧到新' : '时间新到旧';
+  }
+  return sortDirection.value === 'asc' ? '正序' : '倒序';
+});
+
 const filteredPresets = computed(() => {
   let presets = [...(store.extendedPresets || [])];
   
@@ -121,18 +141,43 @@ const filteredPresets = computed(() => {
     );
   }
   
-  return presets.sort((a, b) => {
-    const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.POSITIVE_INFINITY;
-    const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.POSITIVE_INFINITY;
-    if (ao !== bo) return ao - bo;
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+  const sorted = [...presets];
+  if (sortField.value === 'custom') {
+    sorted.sort((a, b) => {
+      const ao = typeof a.sortOrder === 'number' ? a.sortOrder : Number.POSITIVE_INFINITY;
+      const bo = typeof b.sortOrder === 'number' ? b.sortOrder : Number.POSITIVE_INFINITY;
+      if (ao !== bo) return sortDirection.value === 'asc' ? ao - bo : bo - ao;
+      const timeDiff = new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      return sortDirection.value === 'asc' ? timeDiff : -timeDiff;
+    });
+    return sorted;
+  }
+  if (sortField.value === 'name') {
+    sorted.sort((a, b) => {
+      const compare = a.name.localeCompare(b.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
+      if (compare !== 0) {
+        return sortDirection.value === 'asc' ? compare : -compare;
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+    return sorted;
+  }
+  sorted.sort((a, b) => {
+    const compare = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+    if (compare !== 0) {
+      return sortDirection.value === 'asc' ? compare : -compare;
+    }
+    return a.name.localeCompare(b.name, 'zh-CN', { numeric: true, sensitivity: 'base' });
   });
+  return sorted;
 });
 
 const presetListResetKey = computed(() => JSON.stringify({
   selectedType: selectedType.value,
   searchQuery: searchQuery.value,
   selectedFolderId: selectedFolderId.value,
+  sortField: sortField.value,
+  sortDirection: sortDirection.value,
 }));
 
 const flattenedFolders = computed(() => {
@@ -170,6 +215,8 @@ function persistPresetManagerViewState() {
     searchQuery: searchQuery.value,
     selectedFolderId: selectedFolderId.value,
     expandedFolderIds: Array.from(expandedFolderIds.value),
+    sortField: sortField.value,
+    sortDirection: sortDirection.value,
     sidebarScrollTop: presetSidebarRef.value?.contentRef?.scrollTop ?? 0,
     listScrollTop: presetListRef.value?.containerRef?.scrollTop ?? 0,
     currentPage: presetListRef.value?.getCurrentPage?.() ?? 1,
@@ -188,6 +235,8 @@ async function restorePresetManagerViewState() {
       searchQuery?: string;
       selectedFolderId?: string | null;
       expandedFolderIds?: string[];
+      sortField?: 'custom' | 'name' | 'updatedAt';
+      sortDirection?: 'asc' | 'desc';
       sidebarScrollTop?: number;
       listScrollTop?: number;
       currentPage?: number;
@@ -199,6 +248,8 @@ async function restorePresetManagerViewState() {
     searchQuery.value = state.searchQuery ?? '';
     selectedFolderId.value = state.selectedFolderId ?? null;
     expandedFolderIds.value = new Set(state.expandedFolderIds ?? []);
+    sortField.value = state.sortField ?? 'custom';
+    sortDirection.value = state.sortDirection ?? 'asc';
     await nextTick();
     if (typeof state.currentPage === 'number') {
       presetListRef.value?.setCurrentPage?.(state.currentPage, false);
@@ -227,6 +278,14 @@ function handleToggleExpand(id: string) {
   const set = new Set(expandedFolderIds.value);
   if (set.has(id)) set.delete(id); else set.add(id);
   expandedFolderIds.value = set;
+}
+
+function setSortField(field: 'custom' | 'name' | 'updatedAt') {
+  sortField.value = field;
+}
+
+function toggleSortDirection() {
+  sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
 }
 
 function createFolder(parentId?: string) {
@@ -350,6 +409,10 @@ function toggleFavorite(preset: ExtendedPreset) {
 }
 
 function handleReorderPresets(payload: { draggedId: string; targetId: string; side: 'before' | 'after' }) {
+  if (!isCustomSort.value) {
+    showNotification('请先切换到自定义排序后再拖拽', 'info');
+    return;
+  }
   const visibleIds = filteredPresets.value.map(preset => preset.id);
   const from = visibleIds.indexOf(payload.draggedId);
   const target = visibleIds.indexOf(payload.targetId);
@@ -785,6 +848,8 @@ watch(
     selectedType.value,
     searchQuery.value,
     selectedFolderId.value,
+    sortField.value,
+    sortDirection.value,
     Array.from(expandedFolderIds.value).sort().join('|'),
   ],
   () => {
@@ -848,6 +913,34 @@ onBeforeUnmount(() => {
             v-model="selectedType"
             :options="filterOptions"
           />
+          <div class="sort-controls">
+            <div class="sort-field-group">
+              <button
+                v-for="option in sortOptions"
+                :key="option.value"
+                class="sort-chip nav-btn"
+                :class="{ active: sortField === option.value }"
+                @click="setSortField(option.value)"
+                :title="option.label"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+            <button
+              class="sort-direction-btn nav-btn"
+              @click="toggleSortDirection"
+              :title="`切换为${sortDirection === 'asc' ? '倒序' : '正序'}`"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M7 4v16"></path>
+                <path d="M4 7l3-3 3 3"></path>
+                <path d="M13 8h7"></path>
+                <path d="M13 12h5"></path>
+                <path d="M13 16h3"></path>
+              </svg>
+              <span>{{ sortDirectionLabel }}</span>
+            </button>
+          </div>
         </div>
 
         <div class="action-group">
@@ -885,11 +978,15 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="pm-content-area">
+        <div class="sort-hint">
+          {{ isCustomSort ? '当前为自定义排序，可直接拖拽卡片调整顺序。' : '当前为只读排序视图，切回自定义排序后可继续拖拽。' }}
+        </div>
         <PresetList
             ref="presetListRef"
             :presets="filteredPresets"
             :search-query="searchQuery"
             :reset-key="presetListResetKey"
+            :enable-reorder="isCustomSort"
             @apply="applyPreset"
             @edit="editPreset"
             @delete="deletePreset"
@@ -1227,6 +1324,8 @@ onBeforeUnmount(() => {
 .filter-group {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .type-select {
@@ -1234,6 +1333,66 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
+
+.sort-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.sort-field-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-primary);
+}
+
+.sort-chip {
+  padding: 0.45rem 0.75rem;
+  border: none;
+  border-radius: calc(var(--radius-md) - 4px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.sort-chip:hover {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.sort-chip.active {
+  background-color: var(--color-accent);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.sort-direction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.sort-direction-btn:hover {
+  border-color: var(--color-border-hover);
+  background-color: var(--color-bg-secondary);
   color: var(--color-text-primary);
 }
 
@@ -1255,6 +1414,12 @@ onBeforeUnmount(() => {
   flex: 1;
   overflow: hidden;
   position: relative;
+}
+
+.sort-hint {
+  padding: 0.625rem 1rem 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
 }
 
 /* Buttons */
