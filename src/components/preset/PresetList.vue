@@ -4,6 +4,14 @@ import type { ExtendedPreset, PresetType } from '../../types';
 import IconPresetType from '../icons/IconPresetType.vue';
 import IconArrowLeft from '../icons/IconArrowLeft.vue';
 import IconArrowRight from '../icons/IconArrowRight.vue';
+import IconHeart from '../icons/IconHeart.vue';
+import IconCheck from '../icons/IconCheck.vue';
+import IconCopy from '../icons/IconCopy.vue';
+import IconMore from '../icons/IconMore.vue';
+import IconShare from '../icons/IconShare.vue';
+import IconEditor from '../icons/IconEditor.vue';
+import IconTrash from '../icons/IconTrash.vue';
+import IconEmptyState from '../icons/IconEmptyState.vue';
 
 const props = defineProps<{
   presets: ExtendedPreset[];
@@ -187,8 +195,8 @@ function formatDate(dateStr: string) {
 
 <template>
   <div class="preset-list-container" ref="containerRef" @scroll="emit('view-state-change')">
-    <div v-if="presets.length === 0" class="empty-state">
-      <div class="empty-icon">📭</div>
+        <div v-if="presets.length === 0" class="empty-state">
+      <IconEmptyState class="empty-icon" />
       <p class="empty-text">暂无预设</p>
     </div>
 
@@ -234,53 +242,30 @@ function formatDate(dateStr: string) {
             </div>
           <h4 class="preset-name" :title="preset.name">{{ preset.name }}</h4>
           <div class="preset-actions">
-            <button @click="emit('toggle-favorite', preset)" class="action-btn" :class="{ 'is-favorite': preset.isFavorite }" title="收藏">
-              <svg width="14" height="14" viewBox="0 0 24 24" :fill="preset.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-              </svg>
+                        <button @click="emit('toggle-favorite', preset)" class="action-btn" :class="{ 'is-favorite': preset.isFavorite }" title="收藏">
+              <IconHeart :active="preset.isFavorite" width="14" height="14" />
             </button>
-            <button @click="emit('apply', preset)" class="action-btn apply-btn" title="应用预设">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20,6 9,17 4,12"/>
-              </svg>
+                        <button @click="emit('apply', preset)" class="action-btn apply-btn" title="应用到提示词">
+              <IconCheck width="14" height="14" />
             </button>
-            <button @click="emit('copy', preset)" class="action-btn" title="复制内容">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="m5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
+                        <button @click="emit('copy', preset)" class="action-btn" title="复制内容">
+              <IconCopy width="14" height="14" />
             </button>
             <div class="dropdown-menu">
-              <button class="action-btn more-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="1"/>
-                  <circle cx="19" cy="12" r="1"/>
-                  <circle cx="5" cy="12" r="1"/>
-                </svg>
+                            <button class="action-btn more-btn">
+                <IconMore width="14" height="14" />
               </button>
               <div class="dropdown-content">
-                <button @click="emit('share', preset)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="18" cy="5" r="3"/>
-                    <circle cx="6" cy="12" r="3"/>
-                    <circle cx="18" cy="19" r="3"/>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                  </svg>
+                                <button @click="emit('share', preset)">
+                  <IconShare width="14" height="14" />
                   分享
                 </button>
-                <button @click="emit('edit', preset)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="m18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
+                                <button @click="emit('edit', preset)">
+                  <IconEditor width="14" height="14" />
                   编辑
                 </button>
-                <button @click="emit('delete', preset)" class="delete-item">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="3,6 5,6 21,6"/>
-                    <path d="m19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                  </svg>
+                                <button @click="emit('delete', preset)" class="delete-item">
+                  <IconTrash width="14" height="14" />
                   删除
                 </button>
               </div>
@@ -355,8 +340,8 @@ function formatDate(dateStr: string) {
 }
 
 .empty-icon {
-  font-size: 3rem;
   margin-bottom: 1rem;
+  color: var(--color-text-tertiary);
 }
 
 .preset-grid {

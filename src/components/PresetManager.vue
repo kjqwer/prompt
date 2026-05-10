@@ -7,6 +7,13 @@ import PresetSidebar from './preset/PresetSidebar.vue';
 import PresetList from './preset/PresetList.vue';
 import FolderSelector from './preset/FolderSelector.vue';
 import TypeSelector from './preset/TypeSelector.vue';
+import IconMenu from './icons/IconMenu.vue';
+import IconSearch from './icons/IconSearch.vue';
+import IconSort from './icons/IconSort.vue';
+import IconPlus from './icons/IconPlus.vue';
+import IconShare from './icons/IconShare.vue';
+import IconExport from './icons/IconExport.vue';
+import IconImport from './icons/IconImport.vue';
 
 const store = usePromptStore();
 const PRESET_MANAGER_VIEW_STATE_KEY = 'preset-manager-view-state';
@@ -893,18 +900,11 @@ onBeforeUnmount(() => {
     <div class="pm-main">
       <div class="pm-toolbar">
         <button class="btn-icon mobile-menu-btn" @click="showMobileSidebar = true">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-          </svg>
+          <IconMenu width="24" height="24" />
         </button>
 
         <div class="search-box">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
-            <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
-          </svg>
+          <IconSearch width="16" height="16" />
           <input v-model="searchQuery" placeholder="搜索预设..." />
         </div>
 
@@ -931,13 +931,7 @@ onBeforeUnmount(() => {
               @click="toggleSortDirection"
               :title="`切换为${sortDirection === 'asc' ? '倒序' : '正序'}`"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M7 4v16"></path>
-                <path d="M4 7l3-3 3 3"></path>
-                <path d="M13 8h7"></path>
-                <path d="M13 12h5"></path>
-                <path d="M13 16h3"></path>
-              </svg>
+              <IconSort width="14" height="14" />
               <span>{{ sortDirectionLabel }}</span>
             </button>
           </div>
@@ -945,32 +939,19 @@ onBeforeUnmount(() => {
 
         <div class="action-group">
           <button @click="createPreset" class="btn-primary">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-width="2"/>
-              <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2"/>
-            </svg>
+            <IconPlus width="14" height="14" />
             新建预设
           </button>
           
           <div class="import-export">
             <button @click="openShareDialog()" class="btn-icon" title="云端分享/导入">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-              </svg>
+              <IconShare width="16" height="16" />
             </button>
             <button @click="exportPresets" class="btn-icon" title="导出预设">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
-                <polyline points="7,10 12,15 17,10" stroke="currentColor" stroke-width="2"/>
-                <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2"/>
-              </svg>
+              <IconExport width="16" height="16" />
             </button>
             <label class="btn-icon" title="导入预设">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/>
-                <polyline points="17,8 12,3 7,8" stroke="currentColor" stroke-width="2"/>
-                <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/>
-              </svg>
+              <IconImport width="16" height="16" />
               <input type="file" accept=".json" @change="importPresets" style="display: none;">
             </label>
           </div>
