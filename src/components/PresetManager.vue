@@ -409,10 +409,18 @@ function deletePreset(preset: ExtendedPreset) {
 }
 
 function toggleFavorite(preset: ExtendedPreset) {
+  const wasFavorite = preset.isFavorite;
+  showNotification(wasFavorite ? '已取消收藏' : '已添加到收藏', 'success');
   store.updateExtendedPreset(preset.id, { isFavorite: !preset.isFavorite });
   if (!preset.isFavorite) {
     showNotification(`已添加到收藏`, 'success');
   }
+}
+
+function handleToggleFavorite(preset: ExtendedPreset) {
+  const nextIsFavorite = !preset.isFavorite;
+  store.updateExtendedPreset(preset.id, { isFavorite: nextIsFavorite });
+  showNotification(nextIsFavorite ? '已添加到收藏' : '已取消收藏', 'success');
 }
 
 function handleReorderPresets(payload: { draggedId: string; targetId: string; side: 'before' | 'after' }) {
@@ -973,7 +981,7 @@ onBeforeUnmount(() => {
             @delete="deletePreset"
             @copy="copyPresetContent"
             @share="handleShare"
-            @toggle-favorite="toggleFavorite"
+            @toggle-favorite="handleToggleFavorite"
             @reorder="handleReorderPresets"
             @view-state-change="persistPresetManagerViewState"
           />
